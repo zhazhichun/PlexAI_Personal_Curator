@@ -4,58 +4,83 @@ from app.services.plex_service import plex_service
 
 logger = logging.getLogger("plexai.playlist")
 
-PLAYLIST_NAME = "🤖 AI: המומלצים שלך"
+MOVIES_PLAYLIST_NAME = "🤖 AI: סרטים מומלצים"
+SHOWS_PLAYLIST_NAME = "🤖 AI: סדרות מומלצות"
 
 
 class PlaylistService:
     """Service for managing AI recommendation playlists in Plex."""
 
-    async def update_user_playlist(
-        self, user_token: str, recommendations: list[dict], username: str = ""
+    async def update_user_playlists(
+        self,
+        user_token: str,
+        movie_recommendations: list[dict],
+        show_recommendations: list[dict],
+        username: str = "",
     ) -> dict:
-        """Delete old AI playlist and create a new one with fresh recommendations.
+        """Create separate playlists for movies and shows.
 
-        Uses the user's own Plex token so the playlist belongs to them.
+        Uses the user's own Plex token so playlists belong to them.
+        For shows, adds only the first episode (S01E01) so each show
+        appears as a single item instead of expanding to all episodes.
 
         Args:
             user_token: Plex auth token for the user
-            recommendations: List of recommended items with rating_keys
+            movie_recommendations: List of recommended movies with rating_keys
+            show_recommendations: List of recommended shows with rating_keys
             username: Username for logging purposes
 
         Returns:
-            Created playlist info
+            Dict with created playlist info
         """
-        # Step 1: Find and delete existing AI playlist
-        await self._remove_old_playlist(user_token)
+        result = {}
 
-        # Step 2: Extract rating keys from recommendations
-        rating_keys = [rec["rating_key"] for rec in recommendations]
+        # Movies playlist
+        if movie_recommendations:
+            movie_keys = [rec["rating_key"] for rec in movie_recommendations]
+            await self._remove_old_playlist(user_token, MOVIES_PLAYLIST_NAME)
+            playlist = await plex_service.create_playlist(
+                title=MOVIES_PLAYLIST_NAME,
+                rating_keys=movie_keys,
+                token=user_token,
+            )
+            result["movies"] = playlist
+            logger.info(f"Created movies playlist for {username} with {len(movie_keys)} items")
 
-        if not rating_keys:
-            logger.warning("No rating keys to create playlist with")
-            return {}
+        # Shows playlist - use first episode of each show
+        if show_recommendations:
+            episode_keys = []
+            for rec in show_recommendations:
+                first_ep = await plex_service.get_first_episode(
+                    rec["rating_key"], token=user_token
+                )
+                if first_ep:
+                    episode_keys.append(first_ep)
+                    logger.info(f"Show '{rec['title']}' -> first episode key: {first_ep}")
+                else:
+                    logger.warning(f"Could not find first episode for show '{rec['title']}'")
 
-        # Step 3: Create new playlist under the user's account
-        playlist = await plex_service.create_playlist(
-            title=PLAYLIST_NAME,
-            rating_keys=rating_keys,
-            token=user_token,
-        )
+            if episode_keys:
+                await self._remove_old_playlist(user_token, SHOWS_PLAYLIST_NAME)
+                playlist = await plex_service.create_playlist(
+                    title=SHOWS_PLAYLIST_NAME,
+                    rating_keys=episode_keys,
+                    token=user_token,
+                )
+                result["shows"] = playlist
+                logger.info(f"Created shows playlist for {username} with {len(episode_keys)} items")
 
-        logger.info(
-            f"Updated AI playlist for {username} with {len(rating_keys)} items"
-        )
-        return playlist
+        return result
 
-    async def _remove_old_playlist(self, user_token: str):
-        """Find and delete the old AI recommendation playlist."""
+    async def _remove_old_playlist(self, user_token: str, playlist_name: str):
+        """Find and delete an old playlist by name."""
         playlists = await plex_service.get_user_playlists(user_token)
         for pl in playlists:
-            if pl["title"] == PLAYLIST_NAME:
+            if pl["title"] == playlist_name:
                 await plex_service.delete_playlist(pl["ratingKey"], user_token)
-                logger.info(f"Removed old AI playlist: {pl['ratingKey']}")
+                logger.info(f"Removed old playlist: {pl['title']} ({pl['ratingKey']})")
                 return
-        logger.info("No old AI playlist found to remove")
+        logger.info(f"No old playlist '{playlist_name}' found to remove")
 
 
 # Singleton

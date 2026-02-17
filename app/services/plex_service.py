@@ -288,6 +288,53 @@ class PlexService:
             logger.info(f"Created playlist '{title}' with {added}/{len(rating_keys)} items")
             return playlist_data
 
+    async def get_first_episode(self, show_rating_key: str, token: str = None) -> str | None:
+        """Get the rating_key of the first episode (S01E01) of a show.
+
+        This is needed because Plex playlists expand shows into individual episodes.
+        By adding only S01E01, the show appears as one item in the playlist.
+
+        Args:
+            show_rating_key: The rating key of the show
+            token: Plex auth token
+
+        Returns:
+            Rating key of the first episode, or None if not found
+        """
+        async with httpx.AsyncClient() as client:
+            # Get seasons of the show
+            resp = await client.get(
+                f"{self.server_url}/library/metadata/{show_rating_key}/children",
+                headers=self._headers(token),
+            )
+            resp.raise_for_status()
+            seasons = resp.json().get("MediaContainer", {}).get("Metadata", [])
+
+            if not seasons:
+                return None
+
+            # Get first season (skip specials - season 0)
+            first_season = None
+            for season in seasons:
+                if season.get("index", 0) >= 1:
+                    first_season = season
+                    break
+            if not first_season:
+                first_season = seasons[0]
+
+            # Get episodes of the first season
+            resp = await client.get(
+                f"{self.server_url}/library/metadata/{first_season['ratingKey']}/children",
+                headers=self._headers(token),
+            )
+            resp.raise_for_status()
+            episodes = resp.json().get("MediaContainer", {}).get("Metadata", [])
+
+            if episodes:
+                return str(episodes[0]["ratingKey"])
+
+            return None
+
     # === Helpers ===
 
     def _parse_media_item(self, item: dict) -> dict:

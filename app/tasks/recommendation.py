@@ -105,36 +105,43 @@ async def run_recommendation_for_user(user_id: int):
             # === STEP 3: AI BRAIN ===
             logger.info("Step 3/5: Generating AI recommendations...")
 
-            recommendations = await ai_service.generate_recommendations(
+            result = await ai_service.generate_recommendations(
                 watch_history=watch_history,
                 available_content=available_content,
                 past_recommendations=past_recs,
             )
 
-            if not recommendations:
+            movie_recs = result.get("movies", [])
+            show_recs = result.get("shows", [])
+            all_recs = movie_recs + show_recs
+
+            if not all_recs:
                 raise Exception("AI returned no recommendations")
 
-            logger.info(f"AI recommended {len(recommendations)} items:")
-            for i, rec in enumerate(recommendations, 1):
-                logger.info(f"  {i}. {rec['title']} ({rec['type']}) - {rec.get('reason', '')}")
+            logger.info(f"AI recommended {len(movie_recs)} movies + {len(show_recs)} shows:")
+            for i, rec in enumerate(movie_recs, 1):
+                logger.info(f"  🎬 {i}. {rec['title']} (movie) - {rec.get('reason', '')}")
+            for i, rec in enumerate(show_recs, 1):
+                logger.info(f"  📺 {i}. {rec['title']} (show) - {rec.get('reason', '')}")
 
             # === STEP 4: EXECUTOR ===
-            logger.info("Step 4/5: Updating playlist...")
+            logger.info("Step 4/5: Updating playlists...")
 
-            await playlist_service.update_user_playlist(
+            await playlist_service.update_user_playlists(
                 user_token=user.plex_token,
-                recommendations=recommendations,
+                movie_recommendations=movie_recs,
+                show_recommendations=show_recs,
                 username=user.plex_username,
             )
 
             # === STEP 5: SAVE & LOG ===
             logger.info("Step 5/5: Saving results...")
 
-            await feedback_service.save_recommendations(db, user.id, recommendations)
+            await feedback_service.save_recommendations(db, user.id, all_recs)
 
             # Update run record
             run.status = RunStatus.SUCCESS
-            run.items_count = len(recommendations)
+            run.items_count = len(all_recs)
             run.completed_at = datetime.datetime.utcnow()
             await db.commit()
 
