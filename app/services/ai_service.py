@@ -62,6 +62,10 @@ class AIService:
             f"total={len(system_prompt) + len(user_prompt)} chars"
         )
 
+        # Log full prompts for debugging
+        logger.info(f"--- SYSTEM PROMPT ---\n{system_prompt}\n---------------------")
+        logger.info(f"--- USER PROMPT ---\n{user_prompt}\n---------------------")
+
         request_body = {
             "model": self.model,
             "messages": [
@@ -145,59 +149,56 @@ RESPONSE FORMAT:
         movies_count: int = 15,
         shows_count: int = 15,
     ) -> str:
-        # Format watch history - send ALL items for maximum accuracy
         history_str = self._format_items_for_prompt(watch_history)
-
-        # Format available content - send ALL for maximum accuracy
         movies_str = self._format_items_for_prompt(available_movies)
         shows_str = self._format_items_for_prompt(available_shows)
 
-        return f"""Analyze this user's watch history and recommend content from the available library.
+        return f"""
+TASK: You are a sophisticated Content Curator. Your goal is to understand the user's specific taste based on the PLOT and THEMES of what they watched, not just the genre tags.
 
-You MUST recommend EXACTLY {movies_count} MOVIES and EXACTLY {shows_count} TV SHOWS.
-Ensure a mix of 70% content similar to history and 30% discovery/new genres based on high ratings.
+STEP 1: ANALYZE WATCH HISTORY
+Read the 'Summary' of the items below. Define the user's "Vibe":
+- Do they like dark, gritty, realistic stories?
+- Do they prefer lighthearted, escapist fun?
+- Do they like complex anti-heroes or classic good guys?
+- Note the level of violence, drama, and maturity.
 
---- WATCH HISTORY (what the user enjoyed) ---
+USER WATCH HISTORY:
 {history_str}
 
---- AVAILABLE MOVIES (choose {movies_count} movies from these ONLY, type must be "movie") ---
+STEP 2: SELECT RECOMMENDATIONS
+Select exactly {movies_count} MOVIES and {shows_count} TV SHOWS from the available pools.
+MATCHING LOGIC:
+1. **Plot Similarity**: Prioritize items where the 'Summary' sounds like a story the user would enjoy based on Step 1.
+2. **Tone Consistency**: If the user watches "Tulsa King" (Gritty Mafia), do NOT recommend "The Magic School Bus" just because it's popular. Keep the maturity level consistent.
+3. **Genre Nuance**: "Action" can be a Marvel movie or a brutal war movie. Use the Summary to distinguish between them and match the user's preference.
+
+AVAILABLE MOVIES POOL:
 {movies_str}
 
---- AVAILABLE TV SHOWS (choose {shows_count} shows from these ONLY, type must be "show") ---
+AVAILABLE TV SHOWS POOL:
 {shows_str}
 
-IMPORTANT: Recommend exactly {movies_count} movies AND {shows_count} TV shows.
-Make sure the "type" field matches: "movie" for movies, "show" for TV shows.
-Respond with a single JSON array containing all {movies_count + shows_count} items."""
+OUTPUT FORMAT:
+Return a single JSON array containing all {movies_count + shows_count} items.
+The 'reason' field must be in Hebrew and explain the connection based on the PLOT/THEME (e.g., "דרמת פשע מחוספסת עם אנטי-גיבור, בדומה לטולסה קינג שאהבת").
+IMPORTANT: Ensure the JSON is valid.
+"""
 
     def _format_items_for_prompt(self, items: list[dict]) -> str:
-        """Format items for the AI prompt, keeping it concise."""
         lines = []
         for item in items:
-            genres = ", ".join(item.get("genres", [])[:3]) if item.get("genres") else "N/A"
-            directors = ", ".join(item.get("directors", [])[:2]) if item.get("directors") else ""
-            actors = ", ".join(item.get("actors", [])[:3]) if item.get("actors") else ""
-            library = item.get("library", "Unknown Library")
-
-            summary = item.get("summary", "")[:150] if item.get("summary") else ""
-
+            genres = ", ".join(item.get("genres", [])[:3]) # Up to 3 genres
+            # INCREASED SUMMARY LIMIT: Giving the AI more context to understand the plot
+            summary = item.get("summary", "")[:400] if item.get("summary") else "No summary available"
+            
             line = (
-                f"[{item.get('rating_key')}] "
-                f"{item.get('title', 'Unknown')} ({item.get('year', 'N/A')}) "
-                f"| Type: {item.get('type', 'unknown')} "
-                f"| Library: {library} "
-                f"| Genres: {genres}"
+                f"ID:{item.get('rating_key')} | "
+                f"Title: {item.get('title')} ({item.get('year')}) | "
+                f"Genres: {genres} | "
+                f"Summary: {summary}"
             )
-            if directors:
-                line += f" | Dir: {directors}"
-            if actors:
-                line += f" | Cast: {actors}"
-            if item.get("rating"):
-                line += f" | Rating: {item['rating']}"
-            if summary:
-                line += f" | Summary: {summary}"
             lines.append(line)
-
         return "\n".join(lines)
 
     def _parse_response(self, content: str) -> list[dict]:

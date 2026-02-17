@@ -166,7 +166,7 @@ class PlexService:
             data = resp.json()
             items = []
             for item in data.get("MediaContainer", {}).get("Metadata", []):
-                items.append(self._parse_media_item(item, library_title))
+                items.append(self._parse_media_item(item, library_title, library_key))
             return items
 
     async def get_all_content(self, token: str = None) -> list[dict]:
@@ -347,7 +347,7 @@ class PlexService:
 
     # === Helpers ===
 
-    def _parse_media_item(self, item: dict, library_title: str = "") -> dict:
+    def _parse_media_item(self, item: dict, library_title: str = "", library_id: str = "") -> dict:
         """Parse a Plex media item into a standardized dict."""
         genres = [g.get("tag", "") for g in item.get("Genre", [])]
         directors = [d.get("tag", "") for d in item.get("Director", [])]
@@ -359,7 +359,7 @@ class PlexService:
             "year": item.get("year"),
             "type": item.get("type", "unknown"),
             "library": library_title,
-            "library_id": str(item.get("librarySectionID", "")),
+            "library_id": str(item.get("librarySectionID", library_id)),
             "summary": (item.get("summary", ""))[:200],  # Truncate long summaries
             "genres": genres,
             "directors": directors,

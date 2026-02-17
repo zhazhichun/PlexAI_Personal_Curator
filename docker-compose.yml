@@ -6,8 +6,11 @@ services:
       - "8889:8000"
     env_file:
       - .env
+    environment:
+      - TZ=Asia/Jerusalem
     volumes:
       - .:/app
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       db:
         condition: service_healthy
