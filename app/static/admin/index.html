@@ -16,6 +16,10 @@
             <h2>Admin Dashboard</h2>
             <p class="login-subtitle">הכנס סיסמת אדמין</p>
             <input type="password" id="passwordInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')doLogin()">
+            <div class="checkbox-container">
+                <input type="checkbox" id="rememberMe">
+                <label for="rememberMe">זכור אותי</label>
+            </div>
             <button onclick="doLogin()" class="login-btn">כניסה</button>
             <p class="login-error" id="loginError"></p>
         </div>
@@ -33,6 +37,9 @@
                 </div>
             </div>
             <div class="header-left">
+                <button class="logout-btn" onclick="logout()" title="התנתק">
+                    🚪
+                </button>
                 <div class="stat-chip" id="userCount">
                     <span class="stat-icon">👥</span>
                     <span class="stat-value">-</span>

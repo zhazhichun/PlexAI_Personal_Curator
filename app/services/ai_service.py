@@ -56,6 +56,21 @@ class AIService:
             f"History: {len(watch_history)} items, "
             f"Available: {len(available_movies)} movies + {len(available_shows)} shows"
         )
+        logger.info(
+            f"Prompt size: system={len(system_prompt)} chars, "
+            f"user={len(user_prompt)} chars, "
+            f"total={len(system_prompt) + len(user_prompt)} chars"
+        )
+
+        request_body = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4096,
+        }
 
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
@@ -66,21 +81,24 @@ class AIService:
                     "HTTP-Referer": "https://plexai-curator.local",
                     "X-Title": "PlexAI Personal Curator",
                 },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 4096,
-                },
+                json=request_body,
             )
             resp.raise_for_status()
             data = resp.json()
 
+        # Log token usage
+        usage = data.get("usage", {})
+        logger.info(
+            f"AI token usage: "
+            f"prompt={usage.get('prompt_tokens', '?')}, "
+            f"completion={usage.get('completion_tokens', '?')}, "
+            f"total={usage.get('total_tokens', '?')}"
+        )
+
         # Parse the response
         content = data["choices"][0]["message"]["content"]
+        logger.info(f"AI raw response ({len(content)} chars):\n{content}")
+
         result = self._parse_response(content)
         movies = [r for r in result if r.get("type") == "movie"][:m_count]
         shows = [r for r in result if r.get("type") == "show"][:s_count]
@@ -97,10 +115,10 @@ RULES:
 1. Only recommend items from the AVAILABLE CONTENT lists - never suggest items not in the library.
 2. For TV shows, recommend the ENTIRE SHOW (use the show's rating_key), not individual episodes.
 3. Consider genre preferences, directors, actors, and ratings from the watch history.
-4. Avoid recommending items that were previously recommended but not watched (negative signal).
-5. Provide variety - don't recommend only one genre.
-6. Respond ONLY with a valid JSON array, no other text.
-7. Each item MUST have "type" set to either "movie" or "show" correctly.
+4. MIX STRATEGY: 70% of recommendations should be similar to watch history (Exploitation), and 30% should be new/different high-rated content (Exploration).
+5. Provide variety - don't recommend only one genre or franchise.
+5. Respond ONLY with a valid JSON array, no other text.
+6. Each item MUST have "type" set to either "movie" or "show" correctly.
 
 RESPONSE FORMAT:
 [
@@ -127,25 +145,17 @@ RESPONSE FORMAT:
         movies_count: int = 15,
         shows_count: int = 15,
     ) -> str:
-        # Format watch history
-        history_str = self._format_items_for_prompt(watch_history[:50])
+        # Format watch history - send ALL items for maximum accuracy
+        history_str = self._format_items_for_prompt(watch_history)
 
-        # Format available content - movies and shows separately
-        movies_str = self._format_items_for_prompt(available_movies[:200])
-        shows_str = self._format_items_for_prompt(available_shows[:200])
-
-        # Format negative feedback
-        feedback_str = ""
-        if past_recommendations:
-            rejected = [r for r in past_recommendations if r.get("was_removed") or not r.get("was_watched")]
-            if rejected:
-                feedback_str = "\n\n--- PREVIOUSLY RECOMMENDED BUT NOT WATCHED (avoid these patterns) ---\n"
-                for item in rejected[:20]:
-                    feedback_str += f"- {item.get('title', 'Unknown')}\n"
+        # Format available content - send ALL for maximum accuracy
+        movies_str = self._format_items_for_prompt(available_movies)
+        shows_str = self._format_items_for_prompt(available_shows)
 
         return f"""Analyze this user's watch history and recommend content from the available library.
 
 You MUST recommend EXACTLY {movies_count} MOVIES and EXACTLY {shows_count} TV SHOWS.
+Ensure a mix of 70% content similar to history and 30% discovery/new genres based on high ratings.
 
 --- WATCH HISTORY (what the user enjoyed) ---
 {history_str}
@@ -155,7 +165,6 @@ You MUST recommend EXACTLY {movies_count} MOVIES and EXACTLY {shows_count} TV SH
 
 --- AVAILABLE TV SHOWS (choose {shows_count} shows from these ONLY, type must be "show") ---
 {shows_str}
-{feedback_str}
 
 IMPORTANT: Recommend exactly {movies_count} movies AND {shows_count} TV shows.
 Make sure the "type" field matches: "movie" for movies, "show" for TV shows.
@@ -168,11 +177,15 @@ Respond with a single JSON array containing all {movies_count + shows_count} ite
             genres = ", ".join(item.get("genres", [])[:3]) if item.get("genres") else "N/A"
             directors = ", ".join(item.get("directors", [])[:2]) if item.get("directors") else ""
             actors = ", ".join(item.get("actors", [])[:3]) if item.get("actors") else ""
+            library = item.get("library", "Unknown Library")
+
+            summary = item.get("summary", "")[:150] if item.get("summary") else ""
 
             line = (
                 f"[{item.get('rating_key')}] "
                 f"{item.get('title', 'Unknown')} ({item.get('year', 'N/A')}) "
                 f"| Type: {item.get('type', 'unknown')} "
+                f"| Library: {library} "
                 f"| Genres: {genres}"
             )
             if directors:
@@ -181,6 +194,8 @@ Respond with a single JSON array containing all {movies_count + shows_count} ite
                 line += f" | Cast: {actors}"
             if item.get("rating"):
                 line += f" | Rating: {item['rating']}"
+            if summary:
+                line += f" | Summary: {summary}"
             lines.append(line)
 
         return "\n".join(lines)

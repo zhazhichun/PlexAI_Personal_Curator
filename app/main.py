@@ -1,4 +1,6 @@
 import logging
+import os
+from logging.handlers import TimedRotatingFileHandler
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -7,10 +9,27 @@ from app.database import init_db
 from app.api import auth, admin, users
 from app.tasks.scheduler import start_scheduler, shutdown_scheduler
 
+# Setup logging - console + file
+LOG_DIR = "/app/logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+log_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    format=log_format,
 )
+
+# Add file handler with daily rotation (keep 7 days)
+file_handler = TimedRotatingFileHandler(
+    f"{LOG_DIR}/plexai.log",
+    when="midnight",
+    backupCount=7,
+    encoding="utf-8",
+)
+file_handler.setFormatter(logging.Formatter(log_format))
+logging.getLogger().addHandler(file_handler)
+
 logger = logging.getLogger("plexai")
 
 

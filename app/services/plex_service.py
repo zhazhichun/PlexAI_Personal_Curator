@@ -155,7 +155,7 @@ class PlexService:
                     })
             return libraries
 
-    async def get_library_content(self, library_key: str, token: str = None) -> list[dict]:
+    async def get_library_content(self, library_key: str, token: str = None, library_title: str = "") -> list[dict]:
         """Get all items from a specific library."""
         async with httpx.AsyncClient() as client:
             resp = await client.get(
@@ -166,7 +166,7 @@ class PlexService:
             data = resp.json()
             items = []
             for item in data.get("MediaContainer", {}).get("Metadata", []):
-                items.append(self._parse_media_item(item))
+                items.append(self._parse_media_item(item, library_title))
             return items
 
     async def get_all_content(self, token: str = None) -> list[dict]:
@@ -174,7 +174,7 @@ class PlexService:
         libraries = await self.get_libraries(token)
         all_content = []
         for lib in libraries:
-            content = await self.get_library_content(lib["key"], token)
+            content = await self.get_library_content(lib["key"], token, lib["title"])
             all_content.extend(content)
         logger.info(f"Fetched {len(all_content)} items from {len(libraries)} libraries")
         return all_content
@@ -337,7 +337,7 @@ class PlexService:
 
     # === Helpers ===
 
-    def _parse_media_item(self, item: dict) -> dict:
+    def _parse_media_item(self, item: dict, library_title: str = "") -> dict:
         """Parse a Plex media item into a standardized dict."""
         genres = [g.get("tag", "") for g in item.get("Genre", [])]
         directors = [d.get("tag", "") for d in item.get("Director", [])]
@@ -348,6 +348,7 @@ class PlexService:
             "title": item.get("title", "Unknown"),
             "year": item.get("year"),
             "type": item.get("type", "unknown"),
+            "library": library_title,
             "summary": (item.get("summary", ""))[:200],  # Truncate long summaries
             "genres": genres,
             "directors": directors,
@@ -356,6 +357,7 @@ class PlexService:
             "content_rating": item.get("contentRating", ""),
             "duration_minutes": round(item.get("duration", 0) / 60000) if item.get("duration") else None,
             "view_count": item.get("viewCount", 0),
+            "viewed_leaf_count": item.get("viewedLeafCount", 0),
         }
 
 

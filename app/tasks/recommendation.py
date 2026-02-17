@@ -82,10 +82,30 @@ async def run_recommendation_for_user(user_id: int):
             watch_history = unique_history
 
             # Filter available content (not watched)
-            available_content = [
-                item for item in all_content
-                if item["rating_key"] not in watched_keys
-            ]
+            available_content = []
+            excluded_count = 0
+            for item in all_content:
+                key = item["rating_key"]
+                is_watched = False
+
+                # Check Tautulli history
+                if key in watched_keys:
+                    is_watched = True
+
+                # Check Plex watched status (view_count > 0 means watched)
+                elif item.get("view_count", 0) > 0:
+                    is_watched = True
+
+                # Check partial watched status for shows (viewed_leaf_count > 0 means at least one episode watched)
+                elif item["type"] == "show" and item.get("viewed_leaf_count", 0) > 0:
+                    is_watched = True
+
+                if not is_watched:
+                    available_content.append(item)
+                else:
+                    excluded_count += 1
+            
+            logger.info(f"Excluded {excluded_count} items (watched or partially watched)")
 
             logger.info(
                 f"Data: {len(watch_history)} watched, "
@@ -118,11 +138,19 @@ async def run_recommendation_for_user(user_id: int):
             if not all_recs:
                 raise Exception("AI returned no recommendations")
 
+            # Enrich recommendations with library info
+            for rec in all_recs:
+                original_item = content_map.get(rec["rating_key"])
+                if original_item:
+                    rec["library"] = original_item.get("library", "Unknown")
+                else:
+                    logger.warning(f"Recommended item {rec['rating_key']} not found in content map")
+
             logger.info(f"AI recommended {len(movie_recs)} movies + {len(show_recs)} shows:")
             for i, rec in enumerate(movie_recs, 1):
-                logger.info(f"  🎬 {i}. {rec['title']} (movie) - {rec.get('reason', '')}")
+                logger.info(f"  🎬 {i}. {rec['title']} (Library: {rec.get('library')}) - {rec.get('reason', '')}")
             for i, rec in enumerate(show_recs, 1):
-                logger.info(f"  📺 {i}. {rec['title']} (show) - {rec.get('reason', '')}")
+                logger.info(f"  📺 {i}. {rec['title']} (Library: {rec.get('library')}) - {rec.get('reason', '')}")
 
             # === STEP 4: EXECUTOR ===
             logger.info("Step 4/5: Updating playlists...")

@@ -1,16 +1,36 @@
 // ===== State =====
 let adminPassword = '';
 
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', checkStoredPassword);
+
 // ===== Auth =====
+function checkStoredPassword() {
+    const stored = localStorage.getItem('adminPassword');
+    if (stored) {
+        adminPassword = stored;
+        verifyAndLoad();
+    }
+}
+
 function doLogin() {
     const input = document.getElementById('passwordInput');
+    const rememberMe = document.getElementById('rememberMe');
     const error = document.getElementById('loginError');
-    adminPassword = input.value;
+    const newPassword = input.value;
 
-    if (!adminPassword) {
+    if (!newPassword) {
         error.textContent = 'הכנס סיסמה';
         return;
     }
+
+    adminPassword = newPassword;
+    verifyAndLoad(true);
+}
+
+function verifyAndLoad(fromLogin = false) {
+    const error = document.getElementById('loginError');
+    const rememberMe = document.getElementById('rememberMe');
 
     // Test with a simple request
     fetch('/api/admin/users', {
@@ -18,17 +38,40 @@ function doLogin() {
     })
         .then(resp => {
             if (resp.ok) {
+                if (fromLogin && rememberMe && rememberMe.checked) {
+                    localStorage.setItem('adminPassword', adminPassword);
+                }
+
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('dashboard').style.display = 'block';
                 loadDashboard();
             } else {
-                error.textContent = 'סיסמה שגויה';
-                input.value = '';
+                if (fromLogin) {
+                    error.textContent = 'סיסמה שגויה';
+                    document.getElementById('passwordInput').value = '';
+                } else {
+                    // Stored password invalid ONLY if 401
+                    if (resp.status === 401) {
+                        localStorage.removeItem('adminPassword');
+                        adminPassword = '';
+                    } else {
+                        console.error('Server error during auto-login:', resp.status);
+                        // Optional: Show toast or indicator that server is unreachable
+                    }
+                }
             }
         })
         .catch(() => {
-            error.textContent = 'שגיאת חיבור';
+            if (fromLogin) {
+                error.textContent = 'שגיאת חיבור';
+            }
         });
+}
+
+function logout() {
+    localStorage.removeItem('adminPassword');
+    adminPassword = '';
+    window.location.reload();
 }
 
 // ===== API Helpers =====
