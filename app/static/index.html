@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlexAI Personal Curator - התחברות</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        /* Animated background particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(2px 2px at 20% 30%, rgba(229, 160, 13, 0.3), transparent),
+                radial-gradient(2px 2px at 40% 70%, rgba(229, 160, 13, 0.2), transparent),
+                radial-gradient(2px 2px at 60% 40%, rgba(229, 160, 13, 0.15), transparent),
+                radial-gradient(2px 2px at 80% 60%, rgba(229, 160, 13, 0.25), transparent),
+                radial-gradient(1px 1px at 15% 80%, rgba(255, 255, 255, 0.1), transparent),
+                radial-gradient(1px 1px at 75% 20%, rgba(255, 255, 255, 0.1), transparent);
+            animation: float 20s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 460px;
+            padding: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 48px 40px;
+            text-align: center;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, #e5a00d, #cc7a00);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            box-shadow: 0 8px 30px rgba(229, 160, 13, 0.3);
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 8px 30px rgba(229, 160, 13, 0.3); }
+            50% { box-shadow: 0 8px 40px rgba(229, 160, 13, 0.5); }
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #ffffff, #e5a00d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 36px;
+            line-height: 1.5;
+        }
+
+        .plex-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 16px 32px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #000;
+            background: linear-gradient(135deg, #e5a00d, #f5c518);
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+            box-shadow: 0 4px 20px rgba(229, 160, 13, 0.3);
+        }
+
+        .plex-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(229, 160, 13, 0.5);
+        }
+
+        .plex-btn:active {
+            transform: translateY(0);
+        }
+
+        .plex-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .plex-btn .icon {
+            font-size: 1.3rem;
+        }
+
+        /* Status Messages */
+        .status {
+            margin-top: 24px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            display: none;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status.pending {
+            display: block;
+            background: rgba(229, 160, 13, 0.15);
+            border: 1px solid rgba(229, 160, 13, 0.3);
+            color: #f5c518;
+        }
+
+        .status.success {
+            display: block;
+            background: rgba(52, 199, 89, 0.15);
+            border: 1px solid rgba(52, 199, 89, 0.3);
+            color: #34c759;
+        }
+
+        .status.error {
+            display: block;
+            background: rgba(255, 69, 58, 0.15);
+            border: 1px solid rgba(255, 69, 58, 0.3);
+            color: #ff453a;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(229, 160, 13, 0.3);
+            border-top: 2px solid #e5a00d;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .features {
+            margin-top: 36px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .feature {
+            padding: 14px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            transition: all 0.2s ease;
+        }
+
+        .feature:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(229, 160, 13, 0.2);
+        }
+
+        .feature .emoji {
+            font-size: 1.3rem;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 0.78rem;
+            color: rgba(255, 255, 255, 0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="logo">🤖</div>
+            <h1>PlexAI Personal Curator</h1>
+            <p class="subtitle">המלצות צפייה אישיות מבוססות AI<br>מותאמות בדיוק לטעם שלך</p>
+
+            <button class="plex-btn" id="loginBtn" onclick="startLogin()">
+                <span class="icon">▶</span>
+                התחבר עם Plex
+            </button>
+
+            <div class="status" id="status"></div>
+
+            <div class="features">
+                <div class="feature">
+                    <span class="emoji">🎬</span>
+                    סרטים וסדרות
+                </div>
+                <div class="feature">
+                    <span class="emoji">🧠</span>
+                    AI חכם
+                </div>
+                <div class="feature">
+                    <span class="emoji">🔒</span>
+                    פרטי ומאובטח
+                </div>
+                <div class="feature">
+                    <span class="emoji">🔄</span>
+                    עדכון יומי
+                </div>
+            </div>
+        </div>
+        <p class="footer">PlexAI Personal Curator v1.0</p>
+    </div>
+
+    <script>
+        let pollInterval = null;
+
+        async function startLogin() {
+            const btn = document.getElementById('loginBtn');
+            const status = document.getElementById('status');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="icon">⏳</span> מתחבר...';
+            status.className = 'status pending';
+            status.innerHTML = 'ממתין לאישור מ-Plex... <span class="spinner"></span>';
+            status.style.display = 'block';
+
+            try {
+                const resp = await fetch('/auth/login');
+                const data = await resp.json();
+
+                if (!resp.ok) throw new Error(data.detail || 'Login failed');
+
+                // Open Plex auth in new tab
+                window.open(data.auth_url, '_blank');
+
+                // Start polling for auth completion
+                pollInterval = setInterval(() => checkAuth(data.pin_id), 2000);
+
+            } catch (err) {
+                status.className = 'status error';
+                status.innerHTML = '❌ שגיאה: ' + err.message;
+                btn.disabled = false;
+                btn.innerHTML = '<span class="icon">▶</span> התחבר עם Plex';
+            }
+        }
+
+        async function checkAuth(pinId) {
+            try {
+                const resp = await fetch(`/auth/callback/${pinId}`);
+                const data = await resp.json();
+
+                if (data.status === 'success') {
+                    clearInterval(pollInterval);
+                    const status = document.getElementById('status');
+                    status.className = 'status success';
+                    status.innerHTML = `✅ ${data.message}<br><br>הפלייליסט שלך יעודכן בקרוב! 🎉`;
+
+                    const btn = document.getElementById('loginBtn');
+                    btn.innerHTML = '<span class="icon">✓</span> מחובר!';
+                    btn.style.background = 'linear-gradient(135deg, #34c759, #30b350)';
+                }
+                // If pending, keep polling
+            } catch (err) {
+                // Ignore polling errors, keep trying
+                console.error('Poll error:', err);
+            }
+        }
+    </script>
+</body>
+</html>

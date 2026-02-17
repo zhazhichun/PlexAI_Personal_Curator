@@ -1,0 +1,23 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.1
+
+# HTTP client
+httpx==0.28.1
+
+# Configuration
+pydantic-settings==2.7.1
+
+# Authentication
+python-jose[cryptography]==3.3.0
+
+# Scheduling
+apscheduler==3.10.4
+
+# Utilities
+python-multipart==0.0.20

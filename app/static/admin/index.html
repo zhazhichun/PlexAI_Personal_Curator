@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PlexAI Admin Dashboard</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+
+<body>
+    <!-- Login Overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-card">
+            <div class="login-logo">🔐</div>
+            <h2>Admin Dashboard</h2>
+            <p class="login-subtitle">הכנס סיסמת אדמין</p>
+            <input type="password" id="passwordInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')doLogin()">
+            <button onclick="doLogin()" class="login-btn">כניסה</button>
+            <p class="login-error" id="loginError"></p>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div class="dashboard" id="dashboard" style="display:none">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-right">
+                <div class="header-logo">🤖</div>
+                <div>
+                    <h1>PlexAI Dashboard</h1>
+                    <p class="header-subtitle">ניהול המלצות AI</p>
+                </div>
+            </div>
+            <div class="header-left">
+                <div class="stat-chip" id="userCount">
+                    <span class="stat-icon">👥</span>
+                    <span class="stat-value">-</span>
+                    <span class="stat-label">משתמשים</span>
+                </div>
+                <button class="trigger-all-btn" onclick="triggerAll()">
+                    🚀 הפעל לכולם
+                </button>
+            </div>
+        </header>
+
+        <!-- Users Section -->
+        <section class="section">
+            <div class="section-header">
+                <h2>👥 משתמשים רשומים</h2>
+                <button class="refresh-btn" onclick="loadUsers()">🔄 רענן</button>
+            </div>
+            <div class="users-grid" id="usersGrid">
+                <div class="loading">טוען...</div>
+            </div>
+        </section>
+
+        <!-- Runs Section -->
+        <section class="section">
+            <div class="section-header">
+                <h2>📊 ריצות אחרונות</h2>
+                <button class="refresh-btn" onclick="loadRuns()">🔄 רענן</button>
+            </div>
+            <div class="runs-table-container">
+                <table class="runs-table" id="runsTable">
+                    <thead>
+                        <tr>
+                            <th>משתמש</th>
+                            <th>סטטוס</th>
+                            <th>התחלה</th>
+                            <th>סיום</th>
+                            <th>פריטים</th>
+                            <th>שגיאה</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runsBody">
+                        <tr>
+                            <td colspan="6" class="loading">טוען...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    container_name: plexai-curator
+    ports:
+      - "8889:8000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: plexai-db
+    environment:
+      POSTGRES_USER: plexai
+      POSTGRES_PASSWORD: plexai_secret
+      POSTGRES_DB: plexai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U plexai" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
