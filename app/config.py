@@ -25,9 +25,11 @@ class Settings(BaseSettings):
     admin_password: str = "admin"
 
     # Scheduler
+    enable_scheduler: bool = True
     recommendation_hour: int = 3
     recommendation_minute: int = 0
     playlist_size: int = 15
+    allowed_libraries: str = ""  # Comma-separated list of library IDs
 
     class Config:
         env_file = ".env"

@@ -25,6 +25,10 @@ async def scheduled_recommendations_job():
 
 def start_scheduler():
     """Start the APScheduler with the configured cron schedule."""
+    if not settings.enable_scheduler:
+        logger.info("🚫 Scheduler disabled by configuration")
+        return
+
     scheduler.add_job(
         scheduled_recommendations_job,
         trigger=CronTrigger(

@@ -50,6 +50,22 @@ async def run_recommendation_for_user(user_id: int):
             # Get all content from libraries shared with this user
             # Using user's token ensures we only see libraries they have access to
             all_content = await plex_service.get_all_content(user.plex_token)
+            
+            # Filter by ALLOWED_LIBRARIES if configured
+            from app.config import get_settings
+            settings = get_settings()
+            
+            if settings.allowed_libraries:
+                allowed_ids = [lid.strip() for lid in settings.allowed_libraries.split(",") if lid.strip()]
+                if allowed_ids:
+                    filtered_content = []
+                    for item in all_content:
+                        if item.get("library_id") in allowed_ids:
+                            filtered_content.append(item)
+                    
+                    logger.info(f"Filtered content by libraries {allowed_ids}: {len(all_content)} -> {len(filtered_content)}")
+                    all_content = filtered_content
+
             content_map = {item["rating_key"]: item for item in all_content}
 
             # Get watched items via Tautulli (primary source)

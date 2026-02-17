@@ -303,12 +303,22 @@ class PlexService:
         """
         async with httpx.AsyncClient() as client:
             # Get seasons of the show
-            resp = await client.get(
-                f"{self.server_url}/library/metadata/{show_rating_key}/children",
-                headers=self._headers(token),
-            )
-            resp.raise_for_status()
-            seasons = resp.json().get("MediaContainer", {}).get("Metadata", [])
+            try:
+                resp = await client.get(
+                    f"{self.server_url}/library/metadata/{show_rating_key}/children",
+                    headers=self._headers(token),
+                )
+                resp.raise_for_status()
+                seasons = resp.json().get("MediaContainer", {}).get("Metadata", [])
+            except httpx.HTTPStatusError as e:
+                # If 400 Bad Request, it's likely not a show (e.g. it's an episode or movie)
+                if e.response.status_code == 400:
+                    logger.warning(f"Item {show_rating_key} is not a valid show (400 Bad Request)")
+                    return None
+                raise e
+            except Exception as e:
+                logger.error(f"Failed to get children for {show_rating_key}: {e}")
+                return None
 
             if not seasons:
                 return None
@@ -349,6 +359,7 @@ class PlexService:
             "year": item.get("year"),
             "type": item.get("type", "unknown"),
             "library": library_title,
+            "library_id": str(item.get("librarySectionID", "")),
             "summary": (item.get("summary", ""))[:200],  # Truncate long summaries
             "genres": genres,
             "directors": directors,
