@@ -47,6 +47,13 @@ async def check_auth(pin_id: int):
         # Get user info from Plex
         user_info = await plex_service.get_user_info(token)
 
+        # Exchange plex.tv token for server-specific access token
+        # This is needed because the OAuth token can't access the server API directly
+        server_token = await plex_service.get_server_access_token(token)
+        if not server_token:
+            logger.warning(f"Could not get server token for {user_info['username']}, using OAuth token")
+            server_token = token
+
         # Save or update user in database
         async with async_session() as db:
             stmt = select(User).where(User.plex_user_id == user_info["id"])
@@ -55,7 +62,7 @@ async def check_auth(pin_id: int):
 
             if user:
                 # Update existing user's token
-                user.plex_token = token
+                user.plex_token = server_token
                 user.plex_username = user_info["username"]
                 user.plex_email = user_info["email"]
                 user.is_active = True
@@ -65,7 +72,7 @@ async def check_auth(pin_id: int):
                 user = User(
                     plex_username=user_info["username"],
                     plex_email=user_info["email"],
-                    plex_token=token,
+                    plex_token=server_token,
                     plex_user_id=user_info["id"],
                 )
                 db.add(user)

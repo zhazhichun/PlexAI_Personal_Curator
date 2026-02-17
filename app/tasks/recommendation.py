@@ -47,8 +47,9 @@ async def run_recommendation_for_user(user_id: int):
             # === STEP 1: DATA MINING ===
             logger.info("Step 1/5: Collecting data...")
 
-            # Get all content from the Plex server (using admin token)
-            all_content = await plex_service.get_all_content()
+            # Get all content from libraries shared with this user
+            # Using user's token ensures we only see libraries they have access to
+            all_content = await plex_service.get_all_content(user.plex_token)
             content_map = {item["rating_key"]: item for item in all_content}
 
             # Get watched items via Tautulli (primary source)
@@ -68,9 +69,8 @@ async def run_recommendation_for_user(user_id: int):
                         watch_history.append(content_map[key])
             else:
                 logger.warning(f"User {user.plex_username} not found in Tautulli, "
-                              "trying Plex API directly with admin token")
-                # Fallback: use admin token to check watched status
-                watched_keys = await plex_service.get_watched_items()
+                              "trying Plex API directly")
+                watched_keys = await plex_service.get_watched_items(user.plex_token)
 
             # Deduplicate watch history
             seen = set()
@@ -124,6 +124,7 @@ async def run_recommendation_for_user(user_id: int):
             await playlist_service.update_user_playlist(
                 user_token=user.plex_token,
                 recommendations=recommendations,
+                username=user.plex_username,
             )
 
             # === STEP 5: SAVE & LOG ===

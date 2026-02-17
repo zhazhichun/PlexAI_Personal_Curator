@@ -11,13 +11,16 @@ class PlaylistService:
     """Service for managing AI recommendation playlists in Plex."""
 
     async def update_user_playlist(
-        self, user_token: str, recommendations: list[dict]
+        self, user_token: str, recommendations: list[dict], username: str = ""
     ) -> dict:
         """Delete old AI playlist and create a new one with fresh recommendations.
+
+        Uses the user's own Plex token so the playlist belongs to them.
 
         Args:
             user_token: Plex auth token for the user
             recommendations: List of recommended items with rating_keys
+            username: Username for logging purposes
 
         Returns:
             Created playlist info
@@ -32,7 +35,7 @@ class PlaylistService:
             logger.warning("No rating keys to create playlist with")
             return {}
 
-        # Step 3: Create new playlist
+        # Step 3: Create new playlist under the user's account
         playlist = await plex_service.create_playlist(
             title=PLAYLIST_NAME,
             rating_keys=rating_keys,
@@ -40,7 +43,7 @@ class PlaylistService:
         )
 
         logger.info(
-            f"Updated AI playlist with {len(rating_keys)} items"
+            f"Updated AI playlist for {username} with {len(rating_keys)} items"
         )
         return playlist
 
@@ -53,15 +56,6 @@ class PlaylistService:
                 logger.info(f"Removed old AI playlist: {pl['ratingKey']}")
                 return
         logger.info("No old AI playlist found to remove")
-
-    async def get_current_playlist_items(self, user_token: str) -> list[str]:
-        """Get the rating keys of items currently in the AI playlist."""
-        playlists = await plex_service.get_user_playlists(user_token)
-        for pl in playlists:
-            if pl["title"] == PLAYLIST_NAME:
-                # TODO: Fetch playlist items to compare
-                return []
-        return []
 
 
 # Singleton

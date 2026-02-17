@@ -85,6 +85,55 @@ class PlexService:
                 "email": data.get("email", ""),
             }
 
+    async def get_server_access_token(self, plex_tv_token: str) -> str | None:
+        """Exchange a plex.tv OAuth token for a server-specific access token.
+
+        The plex.tv token alone can't access the server API directly.
+        We need the server-specific accessToken from the resources endpoint.
+        Matches the server by its machine identifier.
+
+        Args:
+            plex_tv_token: The token from Plex OAuth
+
+        Returns:
+            Server-specific access token, or None if not found
+        """
+        # First, get the machine identifier of our configured server
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{self.server_url}/",
+                    headers=self._headers(),  # Use admin token
+                )
+                resp.raise_for_status()
+                our_machine_id = resp.json()["MediaContainer"]["machineIdentifier"]
+                logger.info(f"Our server machine ID: {our_machine_id}")
+        except Exception as e:
+            logger.error(f"Failed to get server machine ID: {e}")
+            return None
+
+        # Now find the matching server in user's resources
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{PLEX_API_URL}/resources",
+                headers=self._headers(plex_tv_token),
+                params={"includeHttps": 1, "includeRelay": 1},
+            )
+            resp.raise_for_status()
+            resources = resp.json()
+
+            for resource in resources:
+                if resource.get("provides") != "server":
+                    continue
+                if resource.get("clientIdentifier") == our_machine_id:
+                    access_token = resource.get("accessToken")
+                    if access_token:
+                        logger.info(f"Found server access token for: {resource['name']}")
+                        return access_token
+
+        logger.warning("Could not find server access token in user's resources")
+        return None
+
     # === Library Operations ===
 
     async def get_libraries(self, token: str = None) -> list[dict]:
@@ -130,7 +179,7 @@ class PlexService:
         logger.info(f"Fetched {len(all_content)} items from {len(libraries)} libraries")
         return all_content
 
-    async def get_watched_items(self, token: str) -> set[str]:
+    async def get_watched_items(self, token: str = None) -> set[str]:
         """Get rating keys of all watched items for a user."""
         watched = set()
         libraries = await self.get_libraries(token)
@@ -151,7 +200,7 @@ class PlexService:
 
     # === Playlist Operations ===
 
-    async def get_user_playlists(self, token: str) -> list[dict]:
+    async def get_user_playlists(self, token: str = None) -> list[dict]:
         """Get all playlists for a user."""
         async with httpx.AsyncClient() as client:
             resp = await client.get(
@@ -169,7 +218,7 @@ class PlexService:
                 })
             return playlists
 
-    async def delete_playlist(self, playlist_key: str, token: str):
+    async def delete_playlist(self, playlist_key: str, token: str = None):
         """Delete a playlist by its rating key."""
         async with httpx.AsyncClient() as client:
             resp = await client.delete(
@@ -180,11 +229,17 @@ class PlexService:
             logger.info(f"Deleted playlist {playlist_key}")
 
     async def create_playlist(
-        self, title: str, rating_keys: list[str], token: str, playlist_type: str = "video"
+        self, title: str, rating_keys: list[str], token: str = None, playlist_type: str = "video"
     ) -> dict:
-        """Create a new playlist with the given items."""
-        # Build the machine ID
-        async with httpx.AsyncClient() as client:
+        """Create a new playlist with the given items.
+
+        Creates the playlist with the first item, then adds remaining items
+        one by one via PUT requests (multi-item URI in POST doesn't always work).
+        """
+        if not rating_keys:
+            return {}
+
+        async with httpx.AsyncClient(timeout=60) as client:
             # Get server machine identifier
             resp = await client.get(
                 f"{self.server_url}/",
@@ -193,12 +248,10 @@ class PlexService:
             resp.raise_for_status()
             machine_id = resp.json()["MediaContainer"]["machineIdentifier"]
 
-            # Build URI list
-            uri_list = ",".join(
-                [f"server://{machine_id}/com.plexapp.plugins.library/library/metadata/{key}"
-                 for key in rating_keys]
-            )
+            def _build_uri(key: str) -> str:
+                return f"server://{machine_id}/com.plexapp.plugins.library/library/metadata/{key}"
 
+            # Step 1: Create playlist with first item
             resp = await client.post(
                 f"{self.server_url}/playlists",
                 headers=self._headers(token),
@@ -206,13 +259,34 @@ class PlexService:
                     "type": playlist_type,
                     "title": title,
                     "smart": "0",
-                    "uri": uri_list,
+                    "uri": _build_uri(rating_keys[0]),
                 },
             )
             resp.raise_for_status()
-            logger.info(f"Created playlist '{title}' with {len(rating_keys)} items")
             data = resp.json()
-            return data.get("MediaContainer", {}).get("Metadata", [{}])[0]
+            playlist_data = data.get("MediaContainer", {}).get("Metadata", [{}])[0]
+            playlist_key = playlist_data.get("ratingKey")
+
+            if not playlist_key:
+                logger.error("Failed to get playlist key after creation")
+                return playlist_data
+
+            # Step 2: Add remaining items one by one
+            added = 1
+            for key in rating_keys[1:]:
+                try:
+                    resp = await client.put(
+                        f"{self.server_url}/playlists/{playlist_key}/items",
+                        headers=self._headers(token),
+                        params={"uri": _build_uri(key)},
+                    )
+                    resp.raise_for_status()
+                    added += 1
+                except Exception as e:
+                    logger.warning(f"Failed to add item {key} to playlist: {e}")
+
+            logger.info(f"Created playlist '{title}' with {added}/{len(rating_keys)} items")
+            return playlist_data
 
     # === Helpers ===
 
