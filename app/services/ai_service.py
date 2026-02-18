@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import httpx
 
 from app.config import get_settings
@@ -8,6 +9,18 @@ logger = logging.getLogger("plexai.ai")
 settings = get_settings()
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a media title for fuzzy comparison.
+
+    Converts to lowercase, strips trailing year in parentheses (e.g. '(2013)'),
+    and removes leading/trailing whitespace.  This makes 'Rush (2013)' and 'Rush'
+    compare as equal, which is critical for the AI ID-mismatch fallback logic.
+    """
+    title = title.lower()
+    title = re.sub(r"\s*\(\d{4}\)\s*$", "", title)
+    return title.strip()
 
 
 class AIService:
@@ -72,8 +85,10 @@ class AIService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.7,
+            # Lowered temperature to reduce hallucinations and enforce JSON format
+            "temperature": 0.25,
             "max_tokens": 4096,
+            "response_format": {"type": "json_object"},
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
@@ -103,42 +118,37 @@ class AIService:
         content = data["choices"][0]["message"]["content"]
         logger.info(f"AI raw response ({len(content)} chars):\n{content}")
 
-        result = self._parse_response(content)
+        result = self._parse_response(content, available_content)
         movies = [r for r in result if r.get("type") == "movie"][:m_count]
         shows = [r for r in result if r.get("type") == "show"][:s_count]
         logger.info(f"AI generated {len(movies)} movie + {len(shows)} show recommendations")
         return {"movies": movies, "shows": shows}
 
     def _build_system_prompt(self) -> str:
-        return """You are an expert movie and TV show recommender for a personal Plex media server.
+        return """You are an expert Content Curator for a personal Plex media server.
+Your task is to deeply analyze a user's watch history, identify their specific tone/vibe preferences, and recommend unwatched content strictly from the provided library.
 
-Your job is to analyze a user's watch history and recommend unwatched content from the server's library.
-You MUST recommend BOTH movies AND TV shows separately.
+CRITICAL RULES:
+1. STRICT LIBRARY MATCH: You MUST ONLY recommend items from the provided available pools. DO NOT hallucinate or invent titles/IDs.
+2. NO DUPLICATES: Each 'rating_key' must appear exactly once. Do not recommend the same item twice.
+3. TYPE ACCURACY: Do not mix pools. Items from the 'AVAILABLE MOVIES' pool must be marked as "movie". Items from the 'AVAILABLE TV SHOWS' pool must be marked as "show".
+4. TONE CONSISTENCY: Pay close attention to the maturity, violence, and dramatic tone of the history. If they watch gritty crime/thrillers, DO NOT recommend lighthearted romantic comedies or kids' shows. This rule is ABSOLUTE and overrides all other rules.
+5. MIX STRATEGY: 70% of recommendations should perfectly match the history vibe (same genre, same tone). 30% may explore adjacent genres (e.g., Sci-Fi or Horror instead of just Crime), BUT they MUST strictly maintain the same MATURITY LEVEL and DARK TONE as the watch history. Absolutely NO kids/family/animated movies if the history is mature/dark content.
+6. CREATORS/ACTORS: If the user watches content from a specific author/director (e.g., Harlan Coben, Marvel), prioritize available content from the same universe/creator if applicable.
+7. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
-RULES:
-1. Only recommend items from the AVAILABLE CONTENT lists - never suggest items not in the library.
-2. For TV shows, recommend the ENTIRE SHOW (use the show's rating_key), not individual episodes.
-3. Consider genre preferences, directors, actors, and ratings from the watch history.
-4. MIX STRATEGY: 70% of recommendations should be similar to watch history (Exploitation), and 30% should be new/different high-rated content (Exploration).
-5. Provide variety - don't recommend only one genre or franchise.
-5. Respond ONLY with a valid JSON array, no other text.
-6. Each item MUST have "type" set to either "movie" or "show" correctly.
-
-RESPONSE FORMAT:
-[
-  {
-    "rating_key": "12345",
-    "title": "Movie Title",
-    "type": "movie",
-    "reason": "Brief reason for recommendation in Hebrew"
-  },
-  {
-    "rating_key": "67890",
-    "title": "Show Title",
-    "type": "show",
-    "reason": "Brief reason for recommendation in Hebrew"
-  }
-]"""
+EXPECTED JSON SCHEMA:
+{
+  "vibe_analysis": "Write 2-3 sentences in Hebrew analyzing the user's taste, preferred genres, and emotional tone based on their history. Doing this helps you make better choices.",
+  "recommendations": [
+    {
+      "rating_key": "12345",
+      "title": "Exact Title from the pool",
+      "type": "movie",
+      "reason": "Brief reason in Hebrew explaining why the PLOT fits the vibe_analysis"
+    }
+  ]
+}"""
 
     def _build_user_prompt(
         self,
@@ -154,82 +164,165 @@ RESPONSE FORMAT:
         shows_str = self._format_items_for_prompt(available_shows)
 
         return f"""
-TASK: You are a sophisticated Content Curator. Your goal is to understand the user's specific taste based on the PLOT and THEMES of what they watched, not just the genre tags.
+TASK: Select exactly {movies_count} MOVIES and {shows_count} TV SHOWS that perfectly match the user's taste.
 
-STEP 1: ANALYZE WATCH HISTORY
-Read the 'Summary' of the items below. Define the user's "Vibe":
-- Do they like dark, gritty, realistic stories?
-- Do they prefer lighthearted, escapist fun?
-- Do they like complex anti-heroes or classic good guys?
-- Note the level of violence, drama, and maturity.
-
-USER WATCH HISTORY:
+USER WATCH HISTORY (Analyze this first to understand the vibe):
 {history_str}
 
-STEP 2: SELECT RECOMMENDATIONS
-Select exactly {movies_count} MOVIES and {shows_count} TV SHOWS from the available pools.
-MATCHING LOGIC:
-1. **Plot Similarity**: Prioritize items where the 'Summary' sounds like a story the user would enjoy based on Step 1.
-2. **Tone Consistency**: If the user watches "Tulsa King" (Gritty Mafia), do NOT recommend "The Magic School Bus" just because it's popular. Keep the maturity level consistent.
-3. **Genre Nuance**: "Action" can be a Marvel movie or a brutal war movie. Use the Summary to distinguish between them and match the user's preference.
-
-AVAILABLE MOVIES POOL:
+AVAILABLE MOVIES POOL (Select exactly {movies_count} from here):
 {movies_str}
 
-AVAILABLE TV SHOWS POOL:
+AVAILABLE TV SHOWS POOL (Select exactly {shows_count} from here):
 {shows_str}
 
-OUTPUT FORMAT:
-Return a single JSON array containing all {movies_count + shows_count} items.
-The 'reason' field must be in Hebrew and explain the connection based on the PLOT/THEME (e.g., "דרמת פשע מחוספסת עם אנטי-גיבור, בדומה לטולסה קינג שאהבת").
-IMPORTANT: Ensure the JSON is valid.
+Remember: Output a valid JSON object containing "vibe_analysis" and the "recommendations" array.
 """
 
     def _format_items_for_prompt(self, items: list[dict]) -> str:
         lines = []
         for item in items:
-            genres = ", ".join(item.get("genres", [])[:3]) # Up to 3 genres
-            # INCREASED SUMMARY LIMIT: Giving the AI more context to understand the plot
+            # Genres intentionally omitted to force the model to read the summary
             summary = item.get("summary", "")[:400] if item.get("summary") else "No summary available"
-            
+
             line = (
                 f"ID:{item.get('rating_key')} | "
                 f"Title: {item.get('title')} ({item.get('year')}) | "
-                f"Genres: {genres} | "
                 f"Summary: {summary}"
             )
             lines.append(line)
         return "\n".join(lines)
 
-    def _parse_response(self, content: str) -> list[dict]:
-        """Parse the AI response to extract recommendations."""
-        # Try to find JSON array in the response
+    def _parse_response(self, content: str, available_content: list[dict] = None) -> list[dict]:
+        """Parse the AI response and validate rating_key IDs against available_content.
+
+        LLMs are known to confuse numeric IDs when working with large lists.
+        This method cross-references every recommendation's rating_key with the
+        actual available_content pool. If the ID doesn't match the title, it
+        attempts to find the correct ID by searching for the title. If no match
+        is found at all, the recommendation is discarded.
+        """
         content = content.strip()
 
         # Remove markdown code block if present
         if content.startswith("```"):
             lines = content.split("\n")
-            # Remove first and last lines (```json and ```)
-            content = "\n".join(lines[1:-1])
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines)
 
         try:
-            recommendations = json.loads(content)
-            if isinstance(recommendations, list):
-                # Validate each recommendation has required fields
-                valid = []
-                for rec in recommendations:
-                    if "rating_key" in rec and "title" in rec:
+            parsed_data = json.loads(content)
+
+            # Log the vibe analysis so we can see what the model "thought"
+            if isinstance(parsed_data, dict) and "vibe_analysis" in parsed_data:
+                logger.info(f"AI Vibe Analysis: {parsed_data['vibe_analysis']}")
+
+            # Extract recommendations list from the new schema
+            if isinstance(parsed_data, dict):
+                recommendations = parsed_data.get("recommendations", [])
+            elif isinstance(parsed_data, list):
+                # Fallback: model returned a plain array
+                recommendations = parsed_data
+            else:
+                recommendations = []
+
+            # Build lookup maps from available_content for ID validation
+            key_to_item = {}
+            title_to_item = {}  # normalized title -> item
+            if available_content:
+                for item in available_content:
+                    key_to_item[str(item["rating_key"])] = item
+                    # Store under normalized title so year/spacing differences don't break lookup
+                    title_to_item[_normalize_title(item["title"])] = item
+
+            valid = []
+            seen_keys = set()  # Deduplication safety net
+
+            for rec in recommendations:
+                if "rating_key" not in rec or "title" not in rec:
+                    continue
+
+                r_key = str(rec["rating_key"])
+                ai_title = rec["title"].strip()
+
+                # --- ID Validation (only when available_content is provided) ---
+                if available_content:
+                    matched_item = key_to_item.get(r_key)
+
+                    if matched_item:
+                        # ID exists — verify the title roughly matches
+                        real_title = matched_item["title"].lower()
+                        ai_title_lower = ai_title.lower()
+                        titles_match = (
+                            ai_title_lower in real_title or
+                            real_title in ai_title_lower
+                        )
+                        if not titles_match:
+                            # Classic LLM ID mismatch — try to find the correct item by title
+                            logger.warning(
+                                f"ID MISMATCH: AI said ID={r_key} is '{ai_title}' "
+                                f"but that ID belongs to '{matched_item['title']}'. "
+                                f"Searching by title..."
+                            )
+                            found = title_to_item.get(_normalize_title(ai_title))
+                            if found:
+                                logger.info(
+                                    f"ID FIXED: '{ai_title}' corrected from "
+                                    f"ID={r_key} to ID={found['rating_key']}"
+                                )
+                                r_key = str(found["rating_key"])
+                                matched_item = found
+                            else:
+                                logger.warning(
+                                    f"SKIPPED: Could not find '{ai_title}' in available content."
+                                )
+                                continue
+                    else:
+                        # ID not found at all — try to recover by title
+                        logger.warning(
+                            f"UNKNOWN ID: AI returned ID={r_key} for '{ai_title}' "
+                            f"which is not in available content. Searching by title..."
+                        )
+                        found = title_to_item.get(_normalize_title(ai_title))
+                        if found:
+                            logger.info(
+                                f"ID RECOVERED: '{ai_title}' found with ID={found['rating_key']}"
+                            )
+                            r_key = str(found["rating_key"])
+                            matched_item = found
+                        else:
+                            logger.warning(
+                                f"SKIPPED: '{ai_title}' (ID={r_key}) not found anywhere in available content."
+                            )
+                            continue
+
+                    # Use validated data from the real library item
+                    if r_key not in seen_keys:
+                        seen_keys.add(r_key)
                         valid.append({
-                            "rating_key": str(rec["rating_key"]),
-                            "title": rec["title"],
+                            "rating_key": r_key,
+                            "title": matched_item["title"],
+                            "type": matched_item.get("type", rec.get("type", "movie")),
+                            "reason": rec.get("reason", ""),
+                        })
+                else:
+                    # No available_content provided — fallback to original behaviour
+                    if r_key not in seen_keys:
+                        seen_keys.add(r_key)
+                        valid.append({
+                            "rating_key": r_key,
+                            "title": ai_title,
                             "type": rec.get("type", "movie"),
                             "reason": rec.get("reason", ""),
                         })
-                return valid
-        except json.JSONDecodeError:
-            logger.error(f"Failed to parse AI response as JSON: {content[:200]}")
 
-        return []
+            return valid
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON. Error: {e}\nContent: {content[:500]}")
+            return []
 
 
 # Singleton
