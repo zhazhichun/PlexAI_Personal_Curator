@@ -50,57 +50,72 @@ async def run_recommendation_for_user(user_id: int):
             # Get all content from libraries shared with this user
             # Using user's token ensures we only see libraries they have access to
             all_content = await plex_service.get_all_content(user.plex_token)
-            
-            # Filter by ALLOWED_LIBRARIES if configured
+
+            # full_content_map includes ALL libraries — used to build watch history
+            # so the AI understands the user's full taste, even from libraries we
+            # don't recommend from (e.g. Flight, Anime, etc.)
+            full_content_map = {item["rating_key"]: item for item in all_content}
+
+            # Filter by ALLOWED_LIBRARIES if configured — only for recommendations
             from app.config import get_settings
             settings = get_settings()
-            
+
+            recommendation_content = all_content
             if settings.allowed_libraries:
                 allowed_ids = [lid.strip() for lid in settings.allowed_libraries.split(",") if lid.strip()]
                 if allowed_ids:
-                    filtered_content = []
-                    for item in all_content:
-                        if item.get("library_id") in allowed_ids:
-                            filtered_content.append(item)
-                    
-                    logger.info(f"Filtered content by libraries {allowed_ids}: {len(all_content)} -> {len(filtered_content)}")
-                    all_content = filtered_content
+                    recommendation_content = [
+                        item for item in all_content
+                        if item.get("library_id") in allowed_ids
+                    ]
+                    logger.info(
+                        f"Filtered recommendation pool by libraries {allowed_ids}: "
+                        f"{len(all_content)} -> {len(recommendation_content)}"
+                    )
 
-            content_map = {item["rating_key"]: item for item in all_content}
+            # content_map used for available_content filtering (recommendations only)
+            content_map = {item["rating_key"]: item for item in recommendation_content}
 
-            # Get watched items via Tautulli (primary source)
-            watched_keys = set()
+            # === BUILD WATCH HISTORY from allowed libraries (Plex data, no limit) ===
+            # We build watch history directly from recommendation_content using Plex's
+            # view_count / viewed_leaf_count fields — this way:
+            #   - Only allowed libraries are included
+            #   - Shows appear once at show-level (with show summary), not per-episode
+            #   - No artificial limit on number of items
+            # Tautulli is still used below to build watched_keys for available_content filtering.
             watch_history = []
+            for item in recommendation_content:
+                if item["type"] == "movie" and item.get("view_count", 0) > 0:
+                    watch_history.append(item)
+                elif item["type"] == "show" and item.get("viewed_leaf_count", 0) > 0:
+                    watch_history.append(item)
+
+            logger.info(
+                f"Built watch history from Plex data: "
+                f"{sum(1 for i in watch_history if i['type'] == 'movie')} movies + "
+                f"{sum(1 for i in watch_history if i['type'] == 'show')} shows"
+            )
+
+            # Get watched_keys via Tautulli — used only for available_content filtering
+            watched_keys = set()
             tautulli_user = await tautulli_service.get_user_by_plex_id(user.plex_user_id)
             if tautulli_user:
                 raw_history = await tautulli_service.get_user_watch_history(
-                    tautulli_user["user_id"], length=200
+                    tautulli_user["user_id"], length=5000
                 )
                 for h in raw_history:
-                    # For episodes, use the show's rating key
                     key = h.get("grandparent_rating_key") or h.get("rating_key")
                     if key:
                         watched_keys.add(key)
-                    if key in content_map:
-                        watch_history.append(content_map[key])
             else:
                 logger.warning(f"User {user.plex_username} not found in Tautulli, "
                               "trying Plex API directly")
                 watched_keys = await plex_service.get_watched_items(user.plex_token)
 
-            # Deduplicate watch history
-            seen = set()
-            unique_history = []
-            for item in watch_history:
-                if item["rating_key"] not in seen:
-                    seen.add(item["rating_key"])
-                    unique_history.append(item)
-            watch_history = unique_history
-
-            # Filter available content (not watched)
+            # Filter available content (not watched) — from allowed libraries only
             available_content = []
             excluded_count = 0
-            for item in all_content:
+            for item in recommendation_content:
                 key = item["rating_key"]
                 is_watched = False
 
@@ -120,14 +135,15 @@ async def run_recommendation_for_user(user_id: int):
                     available_content.append(item)
                 else:
                     excluded_count += 1
-            
+
             logger.info(f"Excluded {excluded_count} items (watched or partially watched)")
 
             logger.info(
                 f"Data: {len(watch_history)} watched, "
                 f"{len(available_content)} available, "
-                f"{len(all_content)} total"
+                f"{len(recommendation_content)} total in allowed libraries"
             )
+
 
             # === STEP 2: FEEDBACK ANALYSIS ===
             logger.info("Step 2/5: Analyzing feedback...")

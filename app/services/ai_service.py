@@ -129,13 +129,15 @@ class AIService:
 Your task is to deeply analyze a user's watch history, identify their specific tone/vibe preferences, and recommend unwatched content strictly from the provided library.
 
 CRITICAL RULES:
-1. STRICT LIBRARY MATCH: You MUST ONLY recommend items from the provided available pools. DO NOT hallucinate or invent titles/IDs.
-2. NO DUPLICATES: Each 'rating_key' must appear exactly once. Do not recommend the same item twice.
-3. TYPE ACCURACY: Do not mix pools. Items from the 'AVAILABLE MOVIES' pool must be marked as "movie". Items from the 'AVAILABLE TV SHOWS' pool must be marked as "show".
-4. TONE CONSISTENCY: Pay close attention to the maturity, violence, and dramatic tone of the history. If they watch gritty crime/thrillers, DO NOT recommend lighthearted romantic comedies or kids' shows. This rule is ABSOLUTE and overrides all other rules.
-5. MIX STRATEGY: 70% of recommendations should perfectly match the history vibe (same genre, same tone). 30% may explore adjacent genres (e.g., Sci-Fi or Horror instead of just Crime), BUT they MUST strictly maintain the same MATURITY LEVEL and DARK TONE as the watch history. Absolutely NO kids/family/animated movies if the history is mature/dark content.
-6. CREATORS/ACTORS: If the user watches content from a specific author/director (e.g., Harlan Coben, Marvel), prioritize available content from the same universe/creator if applicable.
-7. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
+1. STRICT LIBRARY MATCH: You MUST ONLY recommend items from the AVAILABLE POOLS below. DO NOT hallucinate or invent titles/IDs.
+2. NEVER RECOMMEND WATCHED: NEVER recommend any item that appears in the USER WATCH HISTORY section. Those items have already been watched. Recommending a watched item is a critical failure.
+3. NO DUPLICATES: Each 'rating_key' must appear exactly once. Do not recommend the same item twice.
+4. TYPE ACCURACY: Do not mix pools. Items from the 'AVAILABLE MOVIES' pool must be marked as "movie". Items from the 'AVAILABLE TV SHOWS' pool must be marked as "show".
+5. EXACT TITLE: Copy the title field EXACTLY as it appears in the pool. Do NOT translate, transliterate, or modify the title in any way. The title must be character-for-character identical to the pool entry.
+6. TONE CONSISTENCY: Pay close attention to the maturity, violence, and dramatic tone of the history. If they watch gritty crime/thrillers, DO NOT recommend lighthearted romantic comedies or kids' shows. This rule is ABSOLUTE and overrides all other rules.
+7. MIX STRATEGY: 70% of recommendations should perfectly match the history vibe (same genre, same tone). 30% may explore adjacent genres (e.g., Sci-Fi or Horror instead of just Crime), BUT they MUST strictly maintain the same MATURITY LEVEL and DARK TONE as the watch history. Absolutely NO kids/family/animated movies if the history is mature/dark content.
+8. CREATORS/ACTORS: If the user watches content from a specific author/director (e.g., Harlan Coben, Marvel), prioritize available content from the same universe/creator if applicable.
+9. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
 EXPECTED JSON SCHEMA:
 {
@@ -143,7 +145,7 @@ EXPECTED JSON SCHEMA:
   "recommendations": [
     {
       "rating_key": "12345",
-      "title": "Exact Title from the pool",
+      "title": "EXACT title copied character-for-character from the pool — NO translation",
       "type": "movie",
       "reason": "Brief reason in Hebrew explaining why the PLOT fits the vibe_analysis"
     }
@@ -165,17 +167,25 @@ EXPECTED JSON SCHEMA:
 
         return f"""
 TASK: Select exactly {movies_count} MOVIES and {shows_count} TV SHOWS that perfectly match the user's taste.
+IMPORTANT: You may ONLY select from the AVAILABLE POOLS. Do NOT pick anything from the WATCH HISTORY.
 
-USER WATCH HISTORY (Analyze this first to understand the vibe):
+{'='*60}
+SECTION 1 — USER WATCH HISTORY (READ ONLY — do NOT recommend these)
+{'='*60}
 {history_str}
 
-AVAILABLE MOVIES POOL (Select exactly {movies_count} from here):
+{'='*60}
+SECTION 2 — AVAILABLE MOVIES POOL (Select exactly {movies_count} from HERE ONLY)
+{'='*60}
 {movies_str}
 
-AVAILABLE TV SHOWS POOL (Select exactly {shows_count} from here):
+{'='*60}
+SECTION 3 — AVAILABLE TV SHOWS POOL (Select exactly {shows_count} from HERE ONLY)
+{'='*60}
 {shows_str}
 
 Remember: Output a valid JSON object containing "vibe_analysis" and the "recommendations" array.
+All recommendations MUST come from Section 2 or Section 3. NEVER from Section 1.
 """
 
     def _format_items_for_prompt(self, items: list[dict]) -> str:
