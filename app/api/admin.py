@@ -47,6 +47,7 @@ async def get_users(
             "username": user.plex_username,
             "email": user.plex_email,
             "is_active": user.is_active,
+            "enable_recommendations": user.enable_recommendations,
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "latest_run": {
                 "status": latest_run.status.value if latest_run else None,
@@ -142,3 +143,26 @@ async def delete_user(
     await db.flush()
     logger.info(f"Deactivated user: {user.plex_username}")
     return {"status": "success", "message": f"User {user.plex_username} deactivated"}
+
+
+@router.patch("/users/{user_id}/toggle-recommendations")
+async def toggle_recommendations(
+    user_id: int,
+    enable: bool,
+    db: AsyncSession = Depends(get_db),
+    _admin: bool = Depends(verify_admin),
+):
+    """Enable or disable AI recommendations for a user."""
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.enable_recommendations = enable
+    await db.commit()
+    
+    status = "enabled" if enable else "disabled"
+    logger.info(f"Recommendations {status} for user: {user.plex_username}")
+    return {"status": "success", "message": f"Recommendations {status} for {user.plex_username}"}

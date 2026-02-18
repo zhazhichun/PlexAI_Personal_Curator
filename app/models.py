@@ -26,6 +26,7 @@ class User(Base):
     plex_token: Mapped[str] = mapped_column(Text, nullable=False)
     plex_user_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    enable_recommendations: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow
     )

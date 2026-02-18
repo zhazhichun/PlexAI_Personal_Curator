@@ -97,6 +97,12 @@ async function apiDelete(url) {
     return resp.json();
 }
 
+async function apiPatch(url) {
+    const resp = await fetch(url, { method: 'PATCH', headers: apiHeaders() });
+    if (!resp.ok) throw new Error(`API Error: ${resp.status}`);
+    return resp.json();
+}
+
 // ===== Dashboard Loading =====
 function loadDashboard() {
     loadUsers();
@@ -160,10 +166,15 @@ async function loadUsers() {
                     </div>
                     <div class="user-run-status">📊 ריצה אחרונה: ${runInfo}</div>
                     <div class="user-card-actions">
-                        <button class="action-btn trigger" onclick="triggerUser(${user.id})">
-                            🚀 הפעל המלצות
+                        <button class="action-btn trigger" onclick="triggerUser(${user.id})" title="הרץ המלצות באופן חד פעמי">
+                            🚀 הרץ עכשיו
                         </button>
-                        <button class="action-btn danger" onclick="deactivateUser(${user.id}, '${user.username}')">
+                        <button class="action-btn ${user.enable_recommendations ? 'success' : 'warning'}" 
+                                onclick="toggleRecs(${user.id}, ${!user.enable_recommendations}, '${user.username}')"
+                                title="${user.enable_recommendations ? 'לחץ לכיבוי המלצות אוטומטיות' : 'לחץ להפעלת המלצות אוטומטיות'}">
+                            ${user.enable_recommendations ? '✅ AI פעיל' : '⛔ AI כבוי'}
+                        </button>
+                        <button class="action-btn danger" onclick="deactivateUser(${user.id}, '${user.username}')" title="השבת משתמש לגמרי">
                             🗑️ השבת
                         </button>
                     </div>
@@ -248,6 +259,20 @@ async function deactivateUser(userId, username) {
     if (!confirm(`להשבית את ${username}?`)) return;
     try {
         const data = await apiDelete(`/api/admin/users/${userId}`);
+        showToast('✅ ' + data.message);
+        loadUsers();
+    } catch (err) {
+        showToast('❌ שגיאה: ' + err.message);
+    }
+}
+
+
+async function toggleRecs(userId, enable, username) {
+    if (!confirm(enable ? `להפעיל המלצות עבור ${username}?` : `לכבות המלצות עבור ${username}?`)) return;
+
+    showToast('⏳ מעדכן...');
+    try {
+        const data = await apiPatch(`/api/admin/users/${userId}/toggle-recommendations?enable=${enable}`);
         showToast('✅ ' + data.message);
         loadUsers();
     } catch (err) {
