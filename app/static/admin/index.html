@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -14,13 +14,13 @@
         <div class="login-card">
             <div class="login-logo">🔐</div>
             <h2>Admin Dashboard</h2>
-            <p class="login-subtitle">הכנס סיסמת אדמין</p>
-            <input type="password" id="passwordInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')doLogin()">
+            <p class="login-subtitle">Enter admin password</p>
+            <input type="password" id="passwordInput" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
             <div class="checkbox-container">
                 <input type="checkbox" id="rememberMe">
-                <label for="rememberMe">זכור אותי</label>
+                <label for="rememberMe">Remember me</label>
             </div>
-            <button onclick="doLogin()" class="login-btn">כניסה</button>
+            <button onclick="doLogin()" class="login-btn">Login</button>
             <p class="login-error" id="loginError"></p>
         </div>
     </div>
@@ -33,20 +33,20 @@
                 <div class="header-logo">🤖</div>
                 <div>
                     <h1>PlexAI Dashboard</h1>
-                    <p class="header-subtitle">ניהול המלצות AI</p>
+                    <p class="header-subtitle">Manage AI recommendations</p>
                 </div>
             </div>
             <div class="header-left">
-                <button class="logout-btn" onclick="logout()" title="התנתק">
+                <button class="logout-btn" onclick="logout()" title="Logout">
                     🚪
                 </button>
                 <div class="stat-chip" id="userCount">
                     <span class="stat-icon">👥</span>
                     <span class="stat-value">-</span>
-                    <span class="stat-label">משתמשים</span>
+                    <span class="stat-label">Users</span>
                 </div>
                 <button class="trigger-all-btn" onclick="triggerAll()">
-                    🚀 הפעל לכולם
+                    🚀 Trigger All
                 </button>
             </div>
         </header>
@@ -54,35 +54,35 @@
         <!-- Users Section -->
         <section class="section">
             <div class="section-header">
-                <h2>👥 משתמשים רשומים</h2>
-                <button class="refresh-btn" onclick="loadUsers()">🔄 רענן</button>
+                <h2>👥 Registered Users</h2>
+                <button class="refresh-btn" onclick="loadUsers()">🔄 Refresh</button>
             </div>
             <div class="users-grid" id="usersGrid">
-                <div class="loading">טוען...</div>
+                <div class="loading">Loading...</div>
             </div>
         </section>
 
         <!-- Runs Section -->
         <section class="section">
             <div class="section-header">
-                <h2>📊 ריצות אחרונות</h2>
-                <button class="refresh-btn" onclick="loadRuns()">🔄 רענן</button>
+                <h2>📊 Recent Runs</h2>
+                <button class="refresh-btn" onclick="loadRuns()">🔄 Refresh</button>
             </div>
             <div class="runs-table-container">
                 <table class="runs-table" id="runsTable">
                     <thead>
                         <tr>
-                            <th>משתמש</th>
-                            <th>סטטוס</th>
-                            <th>התחלה</th>
-                            <th>סיום</th>
-                            <th>פריטים</th>
-                            <th>שגיאה</th>
+                            <th>User</th>
+                            <th>Status</th>
+                            <th>Start</th>
+                            <th>End</th>
+                            <th>Items</th>
+                            <th>Error</th>
                         </tr>
                     </thead>
                     <tbody id="runsBody">
                         <tr>
-                            <td colspan="6" class="loading">טוען...</td>
+                            <td colspan="6" class="loading">Loading...</td>
                         </tr>
                     </tbody>
                 </table>

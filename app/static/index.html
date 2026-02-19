@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PlexAI Personal Curator - התחברות</title>
+    <title>PlexAI Personal Curator - Login</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -231,11 +231,11 @@
         <div class="card">
             <div class="logo">🤖</div>
             <h1>PlexAI Personal Curator</h1>
-            <p class="subtitle">המלצות צפייה אישיות מבוססות AI<br>מותאמות בדיוק לטעם שלך</p>
+            <p class="subtitle">Personal AI-powered viewing recommendations<br>tailored to your taste</p>
 
             <button class="plex-btn" id="loginBtn" onclick="startLogin()">
                 <span class="icon">▶</span>
-                התחבר עם Plex
+                Connect with Plex
             </button>
 
             <div class="status" id="status"></div>
@@ -243,19 +243,19 @@
             <div class="features">
                 <div class="feature">
                     <span class="emoji">🎬</span>
-                    סרטים וסדרות
+                    Movies &amp; TV Shows
                 </div>
                 <div class="feature">
                     <span class="emoji">🧠</span>
-                    AI חכם
+                    Smart AI
                 </div>
                 <div class="feature">
                     <span class="emoji">🔒</span>
-                    פרטי ומאובטח
+                    Private &amp; Secure
                 </div>
                 <div class="feature">
                     <span class="emoji">🔄</span>
-                    עדכון יומי
+                    Daily Updates
                 </div>
             </div>
         </div>
@@ -270,9 +270,9 @@
             const status = document.getElementById('status');
 
             btn.disabled = true;
-            btn.innerHTML = '<span class="icon">⏳</span> מתחבר...';
+            btn.innerHTML = '<span class="icon">⏳</span> Connecting...';
             status.className = 'status pending';
-            status.innerHTML = 'ממתין לאישור מ-Plex... <span class="spinner"></span>';
+            status.innerHTML = 'Waiting for Plex approval... <span class="spinner"></span>';
             status.style.display = 'block';
 
             try {
@@ -289,9 +289,9 @@
 
             } catch (err) {
                 status.className = 'status error';
-                status.innerHTML = '❌ שגיאה: ' + err.message;
+                status.innerHTML = '❌ Error: ' + err.message;
                 btn.disabled = false;
-                btn.innerHTML = '<span class="icon">▶</span> התחבר עם Plex';
+                btn.innerHTML = '<span class="icon">▶</span> Connect with Plex';
             }
         }
 
@@ -304,10 +304,10 @@
                     clearInterval(pollInterval);
                     const status = document.getElementById('status');
                     status.className = 'status success';
-                    status.innerHTML = `✅ ${data.message}<br><br>הפלייליסט שלך יעודכן בקרוב! 🎉`;
+                    status.innerHTML = `✅ ${data.message}<br><br>Your playlist will be updated soon! 🎉`;
 
                     const btn = document.getElementById('loginBtn');
-                    btn.innerHTML = '<span class="icon">✓</span> מחובר!';
+                    btn.innerHTML = '<span class="icon">✓</span> Connected!';
                     btn.style.background = 'linear-gradient(135deg, #34c759, #30b350)';
                 }
                 // If pending, keep polling

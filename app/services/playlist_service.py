@@ -4,8 +4,8 @@ from app.services.plex_service import plex_service
 
 logger = logging.getLogger("plexai.playlist")
 
-MOVIES_PLAYLIST_NAME = "🤖 AI: סרטים מומלצים"
-SHOWS_PLAYLIST_NAME = "🤖 AI: סדרות מומלצות"
+MOVIES_PLAYLIST_NAME = "🤖 AI: Recommended Movies"
+SHOWS_PLAYLIST_NAME = "🤖 AI: Recommended Shows"
 
 
 class PlaylistService:
@@ -37,7 +37,7 @@ class PlaylistService:
         
         for rec in all_recs:
             # Fallback for legacy calls or missing data
-            lib = rec.get("library") or ("סרטים" if rec["type"] == "movie" else "סדרות")
+            lib = rec.get("library") or ("Movies" if rec["type"] == "movie" else "Shows")
             if lib not in library_map:
                 library_map[lib] = []
             library_map[lib].append(rec)
