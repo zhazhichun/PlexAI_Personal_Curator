@@ -9,5 +9,8 @@ build/
 venv/
 .venv/
 *.log
+*.log.*
+logs/*
+!logs/.gitkeep
 .DS_Store
 pgdata/

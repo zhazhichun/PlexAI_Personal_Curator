@@ -18,11 +18,11 @@ class Settings(BaseSettings):
     openrouter_model: str = "anthropic/claude-sonnet-4"
 
     # Database
-    database_url: str = "postgresql+asyncpg://plexai:plexai_secret@db:5432/plexai"
+    database_url: str = ""
 
     # Application
-    secret_key: str = "change-this-to-a-random-secret-key"
-    admin_password: str = "admin"
+    secret_key: str = ""
+    admin_password: str = ""
 
     # Scheduler
     enable_scheduler: bool = True
@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 @lru_cache()
