@@ -129,6 +129,25 @@ Use `.env.example` as baseline.
 - `ENABLE_SCHEDULER` (default: `true`)
 - `ALLOWED_LIBRARIES` - Comma-separated Plex library IDs to limit recommendation sources (example: `1,4,7`)
 
+### `ALLOWED_LIBRARIES` Example (`1,2`)
+
+If your Plex libraries are:
+
+- `1` = Movies
+- `2` = TV Shows
+
+Set:
+
+```env
+ALLOWED_LIBRARIES=1,2
+```
+
+Meaning:
+
+- The recommendation pool will include only content from libraries `1` and `2`.
+- Content from other libraries will be ignored for recommendation selection.
+- Watch history is also built from the allowed libraries only.
+
 ## Finding Plex Library IDs
 
 To list available libraries and IDs:
