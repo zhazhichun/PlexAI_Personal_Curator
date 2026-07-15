@@ -21,3 +21,4 @@ apscheduler==3.10.4
 
 # Utilities
 python-multipart==0.0.20
+aiosqlite
