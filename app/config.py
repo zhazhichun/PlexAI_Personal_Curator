@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Plex
-    plex_server_url: str = "http://localhost:32400"
+    plex_server_url: str = "http://10.0.0.30:32400"
     plex_admin_token: str = ""
 
     # Tautulli
