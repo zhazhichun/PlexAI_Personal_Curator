@@ -5,6 +5,10 @@ from app.config import get_settings
 
 settings = get_settings()
 
+import os
+print(f"DEBUG: DATABASE_URL is '{getattr(settings, 'database_url', 'NOT_FOUND')}'")
+print(f"DEBUG: Environment variable is '{os.environ.get('DATABASE_URL', 'NOT_SET')}'")
+
 engine = create_async_engine("sqlite+aiosqlite:////config/plexai.db", echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
