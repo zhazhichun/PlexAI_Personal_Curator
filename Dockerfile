@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+# Force-bust the cache
+ARG CACHEBUST=1
+
 WORKDIR /app
 
 # Install system dependencies
