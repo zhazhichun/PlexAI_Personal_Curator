@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     plex_admin_token: str = ""
 
     # Tautulli
-    tautulli_url: str = "http://localhost:8181"
+    tautulli_url: str = "http://10.0.0.30:8181"
     tautulli_api_key: str = ""
 
     # OpenRouter
