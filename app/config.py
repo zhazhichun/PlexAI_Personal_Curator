@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     openrouter_model: str = "anthropic/claude-sonnet-4"
 
     # Database
-    database_url: str = ""
+    database_url: str = "sqlite+aiosqlite:////config/plexai.db"
 
     # Application
     secret_key: str = ""
