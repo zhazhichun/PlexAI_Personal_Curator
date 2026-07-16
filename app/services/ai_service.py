@@ -30,9 +30,16 @@ class AIService:
         self.api_key = api_key or settings.openrouter_api_key
         raw_model = model or settings.openrouter_model
         
-        # OpenRouter-specific mapping correction for Gemini 1.5 Pro
-        if raw_model == "google/gemini-1.5-pro-latest":
-            self.model = "google/gemini-pro-1.5"
+        # OpenRouter-specific mapping: automatically upgrade deprecated 1.5 strings to the active 2.5 model
+        deprecated_models = [
+            "google/gemini-1.5-pro",
+            "google/gemini-1.5-pro-latest",
+            "google/gemini-pro-1.5"
+        ]
+        
+        if raw_model in deprecated_models:
+            self.model = "google/gemini-2.5-pro"
+            logger.info(f"Automatically upgraded deprecated model '{raw_model}' to '{self.model}'")
         else:
             self.model = raw_model
 
