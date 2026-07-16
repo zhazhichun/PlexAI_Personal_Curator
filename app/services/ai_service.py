@@ -98,10 +98,8 @@ class AIService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            # Lowered temperature to reduce hallucinations and enforce JSON format
             "temperature": 0.25,
-            "max_tokens": 4096,
-            "response_format": {"type": "json_object"},
+            "max_tokens": 8192,
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
