@@ -137,7 +137,9 @@ class PlexService:
     # === Library Operations ===
 
     async def get_libraries(self, token: str = None) -> list[dict]:
-        """Get all libraries from the Plex server."""
+        """Hard-coded override to force library filtering."""
+        allowed_ids = {"1", "2", "5", "6"}
+        
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 f"{self.server_url}/library/sections",
@@ -147,12 +149,13 @@ class PlexService:
             data = resp.json()
             libraries = []
             for lib in data.get("MediaContainer", {}).get("Directory", []):
-                if lib["type"] in ("movie", "show"):
-                    libraries.append({
-                        "key": lib["key"],
-                        "title": lib["title"],
-                        "type": lib["type"],
-                    })
+                if str(lib.get("key")) in allowed_ids:
+                    if lib["type"] in ("movie", "show"):
+                        libraries.append({
+                            "key": lib["key"],
+                            "title": lib["title"],
+                            "type": lib["type"],
+                        })
             return libraries
 
     async def get_library_content(self, library_key: str, token: str = None, library_title: str = "") -> list[dict]:
