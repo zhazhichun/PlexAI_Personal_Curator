@@ -28,7 +28,13 @@ class AIService:
 
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or settings.openrouter_api_key
-        self.model = model or settings.openrouter_model
+        raw_model = model or settings.openrouter_model
+        
+        # OpenRouter-specific mapping correction for Gemini 1.5 Pro
+        if raw_model == "google/gemini-1.5-pro-latest":
+            self.model = "google/gemini-pro-1.5"
+        else:
+            self.model = raw_model
 
     async def generate_recommendations(
         self,
