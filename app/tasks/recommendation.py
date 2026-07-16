@@ -11,18 +11,22 @@ settings = get_settings()
 async def run_recommendation_for_user(user_id: int = None, user_obj = None):
     """
     Runs the pipeline for a single user, generating 8-10 thematic playlists of 20+ items.
-    Accepts either a user_id to query from the DB, or a direct user dictionary/object.
     """
-    # Safely extract username and token based on how your DB passes the user object
-    username = getattr(user_obj, "username", "Admin") if user_obj else "Unknown"
-    token = getattr(user_obj, "plex_token", settings.plex_token) if user_obj else settings.plex_token
+    admin_token = getattr(settings, "plex_admin_token", getattr(settings, "plex_token", ""))
+    
+    if isinstance(user_obj, dict):
+        username = user_obj.get("username", "Admin")
+        token = user_obj.get("plex_token", admin_token)
+    else:
+        username = getattr(user_obj, "username", "Admin") if user_obj else "Admin"
+        token = getattr(user_obj, "plex_token", admin_token) if user_obj else admin_token
     
     logger.info("=" * 50)
     logger.info(f"Starting dynamic theme pipeline for: {username}")
     logger.info("=" * 50)
 
     try:
-        admin_plex = PlexServer(settings.plex_url, settings.plex_token)
+        admin_plex = PlexServer(settings.plex_url, admin_token)
         user_plex = PlexServer(settings.plex_url, token)
         
         logger.info("Step 1/3: Collecting user data...")
@@ -51,7 +55,6 @@ async def run_recommendation_for_user(user_id: int = None, user_obj = None):
             return False
 
         logger.info("Step 2/3: Generating dynamic AI themes...")
-        # Requesting 120 movies and 120 shows to ensure we meet the 8-10 playlists of 20 items requirement
         ai_payload = await ai_service.generate_recommendations(
             watch_history=watch_history,
             available_content=available_content,
@@ -80,29 +83,41 @@ async def run_recommendation_for_user(user_id: int = None, user_obj = None):
         return False
 
 async def run_recommendations_for_all():
-    """Triggered by the scheduler and the API trigger-all route. Runs for all active users."""
-    logger.info("Running thematic recommendations for active users")
+    """Triggered by the scheduler and the API trigger-all route."""
+    logger.info("Running thematic recommendations for Plex Home users via native API...")
     
+    admin_token = getattr(settings, "plex_admin_token", getattr(settings, "plex_token", ""))
     active_users = []
     
     try:
-        # Dynamically import the database dependencies to avoid circular imports
-        from app.db.database import SessionLocal
-        from app.db import crud
+        admin_plex = PlexServer(settings.plex_url, admin_token)
+        account = admin_plex.myPlexAccount()
+        machine_id = admin_plex.machineIdentifier
         
-        db = SessionLocal()
-        all_users = crud.get_users(db)
-        active_users = [u for u in all_users if getattr(u, 'is_active', False)]
-        db.close()
+        # 1. Append the main admin user
+        admin_name = account.username or "Admin"
+        active_users.append({"username": admin_name, "plex_token": admin_token})
+        logger.info(f"Found admin account: {admin_name}")
+        
+        # 2. Append all managed/shared home users
+        for user in account.users():
+            try:
+                user_token = user.get_token(machine_id)
+                if user_token:
+                    display_name = user.title or user.username or "Unknown User"
+                    active_users.append({"username": display_name, "plex_token": user_token})
+                    logger.info(f"Found home user: {display_name}")
+            except Exception as user_err:
+                logger.warning(f"Could not retrieve token for a home user: {user_err}")
+                
     except Exception as e:
-        logger.warning(f"Failed to query active users from DB: {e}. Falling back to admin token only.")
-        # Fallback to process the admin account if DB fails
-        active_users = [{"username": "Admin", "plex_token": settings.plex_token}]
+        logger.error(f"Failed to connect to Plex API to fetch users: {e}. Falling back to admin only.")
+        active_users = [{"username": "Admin", "plex_token": admin_token}]
 
     success_count = 0
-    for user in active_users:
-        result = await run_recommendation_for_user(user_obj=user)
+    for user_obj in active_users:
+        result = await run_recommendation_for_user(user_obj=user_obj)
         if result:
             success_count += 1
 
-    logger.info(f"Completed recommendations for {success_count}/{len(active_users)} users")
+    logger.info(f"Completed recommendations for {success_count}/{len(active_users)} total users")
