@@ -102,6 +102,10 @@ class AIService:
                 },
                 json=request_body,
             )
+            
+            if resp.status_code != 200:
+                raise Exception(f"OpenRouter Gateway Error Body: {resp.text}")
+                
             resp.raise_for_status()
             data = resp.json()
 
