@@ -100,6 +100,7 @@ class AIService:
             ],
             "temperature": 0.25,
             "max_tokens": 8192,
+            "response_format": {"type": "json_object"},
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
@@ -129,8 +130,19 @@ class AIService:
             f"total={usage.get('total_tokens', '?')}"
         )
 
-        # Parse the response
-        content = data["choices"][0]["message"]["content"]
+        # Safely parse the response to prevent NoneType crashes
+        choice = data.get("choices", [{}])[0]
+        message = choice.get("message", {})
+        content = message.get("content")
+
+        if content is None:
+            finish_reason = choice.get("finish_reason", "unknown")
+            logger.error(f"❌ AI returned None for content. Finish reason: {finish_reason}")
+            logger.error(f"Raw choice data: {choice}")
+            # Assign an empty JSON schema to prevent the len() crash and allow graceful failure
+            content = "{}"
+
+        # Safe length calculation
         logger.info(f"AI raw response ({len(content)} chars):\n{content}")
 
         result = self._parse_response(content, available_content)
@@ -152,7 +164,8 @@ CRITICAL RULES:
 6. TONE CONSISTENCY: Pay close attention to the maturity, violence, and dramatic tone of the history. If they watch gritty crime/thrillers, DO NOT recommend lighthearted romantic comedies or kids' shows. This rule is ABSOLUTE and overrides all other rules.
 7. MIX STRATEGY: 70% of recommendations should perfectly match the history vibe (same genre, same tone). 30% may explore adjacent genres (e.g., Sci-Fi or Horror instead of just Crime), BUT they MUST strictly maintain the same MATURITY LEVEL and DARK TONE as the watch history. Absolutely NO kids/family/animated movies if the history is mature/dark content.
 8. CREATORS/ACTORS: If the user watches content from a specific author/director (e.g., Harlan Coben, Marvel), prioritize available content from the same universe/creator if applicable.
-9. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
+9. SAFETY BYPASS: Keep the generated text in the 'vibe_analysis' and 'reason' fields highly clinical, analytical, and family-friendly. Do NOT use overly graphic, violent, or explicit words when describing action/thriller recommendations, as it will trigger upstream API safety filters.
+10. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
 EXPECTED JSON SCHEMA:
 {
