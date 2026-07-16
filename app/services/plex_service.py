@@ -173,21 +173,19 @@ class PlexService:
             return items
 
     async def get_all_content(self, token: str = None) -> list[dict]:
-        """Get all movies and shows, capped to prevent API errors."""
+        """Get movies and shows, capped per library to prevent empty pools."""
         libraries = await self.get_libraries(token)
         all_content = []
-        MAX_ITEMS = 50  # Hard limit to keep payload size under API limits
+        
+        # Fetch 25 items PER library (100 total max) to ensure no pool is left empty
+        MAX_PER_LIB = 25 
         
         for lib in libraries:
             content = await self.get_library_content(lib["key"], token, lib["title"])
-            all_content.extend(content)
-            
-            # If we hit the limit, stop fetching and truncate
-            if len(all_content) >= MAX_ITEMS:
-                all_content = all_content[:MAX_ITEMS]
-                break
+            # Slice the list to only take the first 25 items from this specific library
+            all_content.extend(content[:MAX_PER_LIB])
                 
-        logger.info(f"Fetched {len(all_content)} items (capped) from {len(libraries)} libraries")
+        logger.info(f"Fetched {len(all_content)} total items from {len(libraries)} libraries")
         return all_content
 
     async def get_watched_items(self, token: str = None) -> set[str]:
