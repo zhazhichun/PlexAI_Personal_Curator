@@ -164,19 +164,69 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
 
     def _parse_response(self, content: str, available_content: list[dict] = None) -> list[dict]:
         content = content.strip()
-        if content.startswith("```"):
-            lines = content.split("\n")
-            if lines[0].startswith("
-http://googleusercontent.com/immersive_entry_chip/0
-http://googleusercontent.com/immersive_entry_chip/1
+        
+        # Using single quotes for the markdown checks to prevent copy-paste markdown parser errors
+        if content.startswith('```'):
+            lines = content.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].startswith('```'):
+                lines = lines[:-1]
+            content = '\n'.join(lines)
 
----
+        try:
+            parsed_data = json.loads(content)
+            recommendations = parsed_data.get("recommendations", []) if isinstance(parsed_data, dict) else []
 
-### Step 3: Deploy v14
-1. **Commit** these changes in GitHub.
-2. Update `.github/workflows/docker-build.yml` to **`v14`**.
-3. **Run** the workflow.
-4. **Pull** the `v14` image onto your NAS.
-5. **Run** the trigger. 
+            key_to_item = {}
+            title_to_item = {}
+            if available_content:
+                for item in available_content:
+                    key_to_item[str(item["rating_key"])] = item
+                    title_to_item[_normalize_title(item["title"])] = item
 
-The `ModuleNotFoundError` is gone, and the app will process the users smoothly. Let me know what the log outputs when it finishes!
+            valid = []
+            seen_keys = set()
+
+            for rec in recommendations:
+                if "rating_key" not in rec or "title" not in rec:
+                    continue
+
+                r_key = str(rec["rating_key"])
+                ai_title = rec["title"].strip()
+                theme = rec.get("playlist_title", "Recommended For You")
+
+                if available_content:
+                    matched_item = key_to_item.get(r_key)
+                    if not matched_item:
+                        matched_item = title_to_item.get(_normalize_title(ai_title))
+                    
+                    if matched_item:
+                        r_key = str(matched_item["rating_key"])
+                        if r_key not in seen_keys:
+                            seen_keys.add(r_key)
+                            valid.append({
+                                "rating_key": r_key,
+                                "title": matched_item["title"],
+                                "type": matched_item.get("type", rec.get("type", "movie")),
+                                "playlist_title": theme,
+                                "reason": rec.get("reason", ""),
+                            })
+                else:
+                    if r_key not in seen_keys:
+                        seen_keys.add(r_key)
+                        valid.append({
+                            "rating_key": r_key,
+                            "title": ai_title,
+                            "type": rec.get("type", "movie"),
+                            "playlist_title": theme,
+                            "reason": rec.get("reason", ""),
+                        })
+            return valid
+        except Exception as e:
+            logger.error(f"Failed to parse response: {e}")
+            return []
+
+
+# Singleton
+ai_service = AIService()
