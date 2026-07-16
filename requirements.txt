@@ -27,3 +27,4 @@ uvicorn
 # ... any other dependencies
 
 # Force cache refresh
+plexapi
