@@ -156,13 +156,13 @@ CRITICAL RULES:
 
 EXPECTED JSON SCHEMA:
 {
-  "vibe_analysis": "Write 2-3 sentences in Hebrew analyzing the user's taste, preferred genres, and emotional tone based on their history. Doing this helps you make better choices.",
+  "vibe_analysis": "Write 2-3 sentences in English analyzing the user's taste, preferred genres, and emotional tone based on their history. Doing this helps you make better choices.",
   "recommendations": [
     {
       "rating_key": "12345",
       "title": "EXACT title copied character-for-character from the pool — NO translation",
       "type": "movie",
-      "reason": "Brief reason in Hebrew explaining why the PLOT fits the vibe_analysis"
+      "reason": "Brief reason in English explaining why the PLOT fits the vibe_analysis"
     }
   ]
 }"""
