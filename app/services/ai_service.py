@@ -45,7 +45,6 @@ class AIService:
         movies_count: int = None,
         shows_count: int = None,
     ) -> dict:
-        """Generate personalized recommendations using AI."""
         m_count = movies_count or settings.playlist_size
         s_count = shows_count or settings.playlist_size
         total_limit = m_count + s_count
@@ -56,7 +55,7 @@ class AIService:
         system_prompt = self._build_system_prompt(total_limit)
         user_prompt = self._build_user_prompt(
             watch_history, available_movies, available_shows,
-            past_recommendations, m_count, s_count
+            past_recommendations
         )
 
         request_body = {
@@ -70,7 +69,7 @@ class AIService:
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=180) as client: 
+        async with httpx.AsyncClient(timeout=300) as client: 
             resp = await client.post(
                 OPENROUTER_API_URL,
                 headers={
@@ -94,20 +93,21 @@ class AIService:
         if content is None:
             content = "{}"
 
-        result = self._parse_response(content, available_content)
+        # Passing watch_history into the parser so it knows those IDs are valid
+        result = self._parse_response(content, available_content, watch_history)
         movies = [r for r in result if r.get("type") == "movie"][:m_count]
         shows = [r for r in result if r.get("type") == "show"][:s_count]
         return {"movies": movies, "shows": shows}
 
     def _build_system_prompt(self, total_limit: int) -> str:
         return f"""You are an expert Content Curator for a personal Plex media server.
-Your task is to analyze a user's watch history and group unwatched library items into highly tailored, dynamic themes.
+Your task is to analyze a user's watch history and group library items into highly tailored, dynamic themes.
 
 CRITICAL RULES:
-1. THEME CREATION: Group recommendations into broad conversational themes based on watch history. Format: "Since you liked [Title from History], you'll love this".
-2. OUTPUT LIMITS & QUOTAS: Review the ENTIRE library provided below, but you MUST ONLY output between 5 and 8 different themes. Each theme MUST contain between 5 and 12 items. DO NOT exceed {total_limit} total items across all themes combined to avoid exceeding output token limits.
-3. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. You must use the exact rating_key provided. Do not invent titles or IDs.
-4. NEVER RECOMMEND WATCHED: Never recommend any item that appears in the USER WATCH HISTORY.
+1. THEME CREATION (DISCOVERY): Group UNWATCHED recommendations into broad conversational themes based on watch history. Format: "Since you liked [Title from History], you'll love this".
+2. THE REWATCH THEME: You MUST create exactly ONE theme titled "Rewatch: Old Favorites". This specific theme must contain 5 to 12 items pulled EXCLUSIVELY from the USER WATCH HISTORY pool. 
+3. OUTPUT LIMITS: You MUST output between 5 and 10 different themes (including the one Rewatch theme). Each theme MUST contain between 5 and 12 items. DO NOT exceed {total_limit} total items across all themes combined.
+4. STRICT LIBRARY MATCH: Only recommend items from the provided pools. You must use the exact rating_key provided. Do not invent titles or IDs.
 5. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
 EXPECTED JSON SCHEMA:
@@ -129,41 +129,42 @@ EXPECTED JSON SCHEMA:
         watch_history: list[dict],
         available_movies: list[dict],
         available_shows: list[dict],
-        past_recommendations: list[dict] = None,
-        movies_count: int = 15,
-        shows_count: int = 15,
+        past_recommendations: list[dict] = None
     ) -> str:
-        history_str = self._format_items_for_prompt(watch_history)
-        movies_str = self._format_items_for_prompt(available_movies)
-        shows_str = self._format_items_for_prompt(available_shows)
+        history_str = self._format_items_for_prompt(watch_history, include_summary=True)
+        movies_str = self._format_items_for_prompt(available_movies, include_summary=False)
+        shows_str = self._format_items_for_prompt(available_shows, include_summary=False)
 
         return f"""
-TASK: Select movies and TV shows and organize them into dynamic 'Since you liked...' themes.
+TASK: Select movies and TV shows and organize them into dynamic themes.
 ============================================================
-SECTION 1 — USER WATCH HISTORY (Use these to build your theme titles!)
+SECTION 1 — USER WATCH HISTORY (Use these to build your discovery theme titles, AND to populate your ONE "Rewatch: Old Favorites" theme!)
 ============================================================
 {history_str}
 
 ============================================================
-SECTION 2 — AVAILABLE MOVIES POOL
+SECTION 2 — AVAILABLE MOVIES POOL (ENTIRE UNWATCHED LIBRARY)
 ============================================================
 {movies_str}
 
 ============================================================
-SECTION 3 — AVAILABLE TV SHOWS POOL
+SECTION 3 — AVAILABLE TV SHOWS POOL (ENTIRE UNWATCHED LIBRARY)
 ============================================================
 {shows_str}
 """
 
-    def _format_items_for_prompt(self, items: list[dict]) -> str:
+    def _format_items_for_prompt(self, items: list[dict], include_summary: bool = True) -> str:
         lines = []
         for item in items:
-            summary = item.get("summary", "")[:400] if item.get("summary") else "No summary available"
-            line = f"ID:{item.get('rating_key')} | Title: {item.get('title')} ({item.get('year')}) | Summary: {summary}"
+            if include_summary:
+                summary = item.get("summary", "")[:400] if item.get("summary") else "No summary available"
+                line = f"ID:{item.get('rating_key')} | Title: {item.get('title')} ({item.get('year')}) | Summary: {summary}"
+            else:
+                line = f"ID:{item.get('rating_key')} | Title: {item.get('title')} ({item.get('year')})"
             lines.append(line)
         return "\n".join(lines)
 
-    def _parse_response(self, content: str, available_content: list[dict] = None) -> list[dict]:
+    def _parse_response(self, content: str, available_content: list[dict] = None, watch_history: list[dict] = None) -> list[dict]:
         content = content.strip()
         raw_content = content 
         
@@ -181,10 +182,12 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
 
             key_to_item = {}
             title_to_item = {}
-            if available_content:
-                for item in available_content:
-                    key_to_item[str(item["rating_key"])] = item
-                    title_to_item[_normalize_title(item["title"])] = item
+            
+            # Combine both pools so the parser validates both unwatched recommendations and rewatch favorites
+            combined_pool = (available_content or []) + (watch_history or [])
+            for item in combined_pool:
+                key_to_item[str(item["rating_key"])] = item
+                title_to_item[_normalize_title(item["title"])] = item
 
             valid = []
             seen_keys = set()
@@ -197,7 +200,7 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
                 ai_title = rec["title"].strip()
                 theme = rec.get("playlist_title", "Recommended For You")
 
-                if available_content:
+                if combined_pool:
                     matched_item = key_to_item.get(r_key)
                     if not matched_item:
                         matched_item = title_to_item.get(_normalize_title(ai_title))
