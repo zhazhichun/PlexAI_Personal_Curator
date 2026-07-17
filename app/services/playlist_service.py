@@ -39,8 +39,9 @@ class PlaylistService:
         playlists_created = 0
 
         for theme_name, items in target_themes:
-            if len(items) < 20:
-                logger.warning(f"Skipping theme '{theme_name}' — only contains {len(items)} items (Minimum: 20)")
+            # Lowered the strict minimum from 20 to 4 to allow fresh, niche recommendations
+            if len(items) < 4:
+                logger.warning(f"Skipping theme '{theme_name}' — only contains {len(items)} items (Minimum: 4)")
                 continue
 
             plex_items = []
