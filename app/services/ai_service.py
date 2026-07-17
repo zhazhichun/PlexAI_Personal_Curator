@@ -104,10 +104,11 @@ Your task is to analyze a user's watch history and group unwatched library items
 
 CRITICAL RULES:
 1. THEME CREATION: You must group recommendations into specific conversational themes based on what they already watched. The theme name MUST follow this exact format: "Since you liked [Title from History], you'll love this".
-2. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. Do not invent titles or IDs.
-3. NEVER RECOMMEND WATCHED: Never recommend any item that appears in the USER WATCH HISTORY.
-4. SAFETY BYPASS: Keep text highly clinical and family-friendly to prevent tripping API filters.
-5. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
+2. BROADER MATCHING: Do not be overly strict. Group titles with similar vibes, genres, or target audiences together so each theme contains larger batches of items. (e.g., Any 90s cartoon or kids show can fit into a "Since you liked Rugrats..." theme). Do not create tiny 1-3 item themes if titles can be logically grouped together.
+3. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. Do not invent titles or IDs.
+4. NEVER RECOMMEND WATCHED: Never recommend any item that appears in the USER WATCH HISTORY.
+5. SAFETY BYPASS: Keep text highly clinical and family-friendly to prevent tripping API filters.
+6. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
 EXPECTED JSON SCHEMA:
 {
