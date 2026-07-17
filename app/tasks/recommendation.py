@@ -8,15 +8,10 @@ from app.services.playlist_service import playlist_service
 logger = logging.getLogger("plexai.recommendation")
 settings = get_settings()
 
-# Define your static server details here to bypass the attribute error
 PLEX_URL = "http://127.0.0.1:32400"  
 PLEX_TOKEN = getattr(settings, "plex_admin_token", getattr(settings, "plex_token", ""))
 
 async def run_recommendation_for_user(user_obj=None):
-    """
-    Runs the pipeline for a single user.
-    """
-    # Safely extract the username and token from the dictionary
     username = user_obj.get("username", "Admin") if isinstance(user_obj, dict) else "Admin"
     token = user_obj.get("plex_token", PLEX_TOKEN) if isinstance(user_obj, dict) else PLEX_TOKEN
     
@@ -32,13 +27,12 @@ async def run_recommendation_for_user(user_obj=None):
         watch_history = []
         available_content = []
         
-        # Iterate through libraries safely instead of using deprecated server-wide methods
         for section in user_plex.library.sections():
             if section.type not in ['movie', 'show']:
                 continue
             
-            # 1. Grab up to 50 of the most recently watched items per library for context
-            watched_items = section.search(unwatched=False, sort='lastViewedAt:desc')[:50]
+            # Bumped to 100 items to give the AI a robust pool for the Rewatch playlist
+            watched_items = section.search(unwatched=False, sort='lastViewedAt:desc')[:100]
             for item in watched_items:
                 watch_history.append({
                     "rating_key": item.ratingKey, 
@@ -47,7 +41,6 @@ async def run_recommendation_for_user(user_obj=None):
                     "type": item.type
                 })
             
-            # 2. Grab all unwatched items to build the recommendations pool
             for item in section.search(unwatched=True):
                 available_content.append({
                     "rating_key": item.ratingKey, 
@@ -63,7 +56,6 @@ async def run_recommendation_for_user(user_obj=None):
 
         logger.info("Step 2/3: Generating dynamic AI themes...")
         
-        # REDUCED COUNT: Lowered to 40/40 to prevent the AI from hitting the hard output token limit
         ai_payload = await ai_service.generate_recommendations(
             watch_history=watch_history,
             available_content=available_content,
@@ -88,7 +80,6 @@ async def run_recommendation_for_user(user_obj=None):
         return False
 
 async def run_recommendations_for_all():
-    """Triggered by the API."""
     logger.info("Running thematic recommendations...")
     
     active_users = []
