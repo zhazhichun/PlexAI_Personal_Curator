@@ -64,12 +64,12 @@ class AIService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.4, # Slightly increased temperature to encourage more creative theme grouping
+            "temperature": 0.4, 
             "max_tokens": 8192,
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=180) as client: # Increased timeout to 3 minutes for large libraries
+        async with httpx.AsyncClient(timeout=180) as client: 
             resp = await client.post(
                 OPENROUTER_API_URL,
                 headers={
@@ -103,9 +103,9 @@ class AIService:
 Your task is to analyze a user's watch history and group unwatched library items into highly tailored, dynamic themes.
 
 CRITICAL RULES:
-1. THEME CREATION: You must group recommendations into specific conversational themes based on what they already watched. The theme name MUST follow this exact format: "Since you liked [Title from History], you'll love this".
-2. CREATIVE GROUPING: Be highly generous and creative with your groupings. Combine titles with similar vibes, genres, or target audiences into larger, broader buckets (e.g., group all 90s animated shows into one Rugrats theme). Cast a wide net to build robust playlists.
-3. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. Do not invent titles or IDs.
+1. THEME CREATION: Group recommendations into broad conversational themes based on watch history. Format: "Since you liked [Title from History], you'll love this".
+2. MANDATORY QUOTA: You MUST generate at least 4 different themes. Each theme MUST contain at least 5 to 10 items. Group similar genres/vibes together broadly to achieve this quota.
+3. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. You must use the exact rating_key provided. Do not invent titles or IDs.
 4. NEVER RECOMMEND WATCHED: Never recommend any item that appears in the USER WATCH HISTORY.
 5. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
@@ -164,6 +164,7 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
 
     def _parse_response(self, content: str, available_content: list[dict] = None) -> list[dict]:
         content = content.strip()
+        raw_content = content # Keep a copy for debugging
         
         # Using single quotes for the markdown checks to prevent copy-paste markdown parser errors
         if content.startswith('```'):
@@ -222,9 +223,16 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
                             "playlist_title": theme,
                             "reason": rec.get("reason", ""),
                         })
+            
+            # THE FAILSAFE LOGGER: If all items were stripped, print the raw output so we can see why
+            if not valid and recommendations:
+                logger.warning(f"AI returned {len(recommendations)} recommendations, but ZERO matched your library. Raw AI Output: {raw_content}")
+            elif not valid:
+                logger.warning(f"AI returned completely empty JSON. Raw AI Output: {raw_content}")
+                
             return valid
         except Exception as e:
-            logger.error(f"Failed to parse response: {e}")
+            logger.error(f"Failed to parse AI JSON response: {e}. Raw AI Output: {raw_content}")
             return []
 
 
