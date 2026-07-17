@@ -48,11 +48,12 @@ class AIService:
         """Generate personalized recommendations using AI."""
         m_count = movies_count or settings.playlist_size
         s_count = shows_count or settings.playlist_size
+        total_limit = m_count + s_count
 
         available_movies = [c for c in available_content if c["type"] == "movie"]
         available_shows = [c for c in available_content if c["type"] == "show"]
 
-        system_prompt = self._build_system_prompt()
+        system_prompt = self._build_system_prompt(total_limit)
         user_prompt = self._build_user_prompt(
             watch_history, available_movies, available_shows,
             past_recommendations, m_count, s_count
@@ -98,30 +99,30 @@ class AIService:
         shows = [r for r in result if r.get("type") == "show"][:s_count]
         return {"movies": movies, "shows": shows}
 
-    def _build_system_prompt(self) -> str:
-        return """You are an expert Content Curator for a personal Plex media server.
+    def _build_system_prompt(self, total_limit: int) -> str:
+        return f"""You are an expert Content Curator for a personal Plex media server.
 Your task is to analyze a user's watch history and group unwatched library items into highly tailored, dynamic themes.
 
 CRITICAL RULES:
 1. THEME CREATION: Group recommendations into broad conversational themes based on watch history. Format: "Since you liked [Title from History], you'll love this".
-2. MANDATORY QUOTA: You MUST generate at least 4 different themes. Each theme MUST contain at least 5 to 10 items. Group similar genres/vibes together broadly to achieve this quota.
+2. OUTPUT LIMITS & QUOTAS: Review the ENTIRE library provided below, but you MUST ONLY output between 5 and 8 different themes. Each theme MUST contain between 5 and 12 items. DO NOT exceed {total_limit} total items across all themes combined to avoid exceeding output token limits.
 3. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. You must use the exact rating_key provided. Do not invent titles or IDs.
 4. NEVER RECOMMEND WATCHED: Never recommend any item that appears in the USER WATCH HISTORY.
 5. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
 EXPECTED JSON SCHEMA:
-{
+{{
   "vibe_analysis": "2-3 sentences in English analyzing the user's taste.",
   "recommendations": [
-    {
+    {{
       "rating_key": "12345",
       "title": "EXACT title copied from the pool",
       "type": "movie",
       "playlist_title": "Since you liked GoldenEye, you'll love this",
       "reason": "Brief clinical reason explaining how this fits the specific theme."
-    }
+    }}
   ]
-}"""
+}}"""
 
     def _build_user_prompt(
         self,
@@ -164,9 +165,8 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
 
     def _parse_response(self, content: str, available_content: list[dict] = None) -> list[dict]:
         content = content.strip()
-        raw_content = content # Keep a copy for debugging
+        raw_content = content 
         
-        # Using single quotes for the markdown checks to prevent copy-paste markdown parser errors
         if content.startswith('```'):
             lines = content.split('\n')
             if lines[0].startswith('```'):
@@ -224,7 +224,6 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
                             "reason": rec.get("reason", ""),
                         })
             
-            # THE FAILSAFE LOGGER: If all items were stripped, print the raw output so we can see why
             if not valid and recommendations:
                 logger.warning(f"AI returned {len(recommendations)} recommendations, but ZERO matched your library. Raw AI Output: {raw_content}")
             elif not valid:
@@ -235,6 +234,4 @@ SECTION 3 — AVAILABLE TV SHOWS POOL
             logger.error(f"Failed to parse AI JSON response: {e}. Raw AI Output: {raw_content}")
             return []
 
-
-# Singleton
 ai_service = AIService()
