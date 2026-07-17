@@ -64,12 +64,12 @@ class AIService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.3,
+            "temperature": 0.4, # Slightly increased temperature to encourage more creative theme grouping
             "max_tokens": 8192,
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=180) as client: # Increased timeout to 3 minutes for large libraries
             resp = await client.post(
                 OPENROUTER_API_URL,
                 headers={
@@ -104,11 +104,10 @@ Your task is to analyze a user's watch history and group unwatched library items
 
 CRITICAL RULES:
 1. THEME CREATION: You must group recommendations into specific conversational themes based on what they already watched. The theme name MUST follow this exact format: "Since you liked [Title from History], you'll love this".
-2. BROADER MATCHING: Do not be overly strict. Group titles with similar vibes, genres, or target audiences together so each theme contains larger batches of items. (e.g., Any 90s cartoon or kids show can fit into a "Since you liked Rugrats..." theme). Do not create tiny 1-3 item themes if titles can be logically grouped together.
+2. CREATIVE GROUPING: Be highly generous and creative with your groupings. Combine titles with similar vibes, genres, or target audiences into larger, broader buckets (e.g., group all 90s animated shows into one Rugrats theme). Cast a wide net to build robust playlists.
 3. STRICT LIBRARY MATCH: Only recommend items from the AVAILABLE POOLS below. Do not invent titles or IDs.
 4. NEVER RECOMMEND WATCHED: Never recommend any item that appears in the USER WATCH HISTORY.
-5. SAFETY BYPASS: Keep text highly clinical and family-friendly to prevent tripping API filters.
-6. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
+5. JSON FORMAT: You MUST respond with a valid JSON object matching the exact schema below.
 
 EXPECTED JSON SCHEMA:
 {
