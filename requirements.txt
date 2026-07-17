@@ -28,3 +28,4 @@ uvicorn
 
 # Force cache refresh
 plexapi
+Pillow==10.3.0
