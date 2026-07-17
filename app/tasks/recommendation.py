@@ -62,11 +62,13 @@ async def run_recommendation_for_user(user_obj=None):
             return False
 
         logger.info("Step 2/3: Generating dynamic AI themes...")
+        
+        # REDUCED COUNT: Lowered to 40/40 to prevent the AI from hitting the hard output token limit
         ai_payload = await ai_service.generate_recommendations(
             watch_history=watch_history,
             available_content=available_content,
-            movies_count=120,
-            shows_count=120
+            movies_count=40,
+            shows_count=40
         )
 
         combined_recs = ai_payload.get("movies", []) + ai_payload.get("shows", [])
