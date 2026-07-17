@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import random
 from plexapi.server import PlexServer
 from app.config import get_settings
 from app.services.ai_service import ai_service
@@ -16,60 +17,70 @@ async def run_recommendation_for_user(user_obj=None):
     token = user_obj.get("plex_token", PLEX_TOKEN) if isinstance(user_obj, dict) else PLEX_TOKEN
     
     logger.info("=" * 50)
-    logger.info(f"Starting dynamic theme pipeline for: {username}")
+    logger.info(f"Starting isolated library pipeline for: {username}")
     logger.info("=" * 50)
 
     try:
         admin_plex = PlexServer(PLEX_URL, PLEX_TOKEN)
         user_plex = PlexServer(PLEX_URL, token)
         
-        logger.info("Step 1/3: Collecting user data...")
-        watch_history = []
-        available_content = []
-        
+        combined_recs = []
+
+        # Iterate through each library independently (Movies, TV Shows, etc.)
         for section in user_plex.library.sections():
             if section.type not in ['movie', 'show']:
                 continue
+                
+            logger.info(f"--- Processing Library: {section.title} ({section.type}) ---")
             
-            # Bumped to 100 items to give the AI a robust pool for the Rewatch playlist
-            watched_items = section.search(unwatched=False, sort='lastViewedAt:desc')[:100]
+            watch_history = []
+            available_content = []
+            
+            # FIX: Use libtype=section.type to force Plex to return SHOWS, not individual episodes
+            watched_items = section.search(unwatched=False, sort='lastViewedAt:desc', libtype=section.type)[:50]
             for item in watched_items:
                 watch_history.append({
                     "rating_key": item.ratingKey, 
                     "title": item.title, 
                     "year": getattr(item, 'year', ''), 
-                    "type": item.type
+                    "type": section.type
                 })
             
-            for item in section.search(unwatched=True):
+            # Fetch unwatched, bounded to 800 per library to ensure lightning-fast AI reading
+            unwatched_items = section.search(unwatched=True, libtype=section.type)
+            if len(unwatched_items) > 800:
+                unwatched_items = random.sample(unwatched_items, 800)
+                
+            for item in unwatched_items:
                 available_content.append({
                     "rating_key": item.ratingKey, 
                     "title": item.title, 
                     "year": getattr(item, 'year', ''), 
-                    "type": item.type, 
-                    "summary": getattr(item, "summary", "")
+                    "type": section.type
                 })
 
-        if not watch_history or not available_content:
-            logger.warning(f"Skipping {username}: Insufficient watch history or library content.")
-            return False
+            if not watch_history or not available_content:
+                logger.warning(f"Skipping {section.title}: Insufficient history or unwatched content.")
+                continue
 
-        logger.info("Step 2/3: Generating dynamic AI themes...")
-        
-        ai_payload = await ai_service.generate_recommendations(
-            watch_history=watch_history,
-            available_content=available_content,
-            movies_count=40,
-            shows_count=40
-        )
+            logger.info(f"Requesting AI curation for {section.title}...")
+            
+            # Request AI recommendations isolated to this specific media type
+            ai_payload = await ai_service.generate_recommendations(
+                media_type=section.type,
+                watch_history=watch_history,
+                available_content=available_content
+            )
 
-        combined_recs = ai_payload.get("movies", []) + ai_payload.get("shows", [])
+            if ai_payload:
+                combined_recs.extend(ai_payload)
 
         if not combined_recs:
-            logger.error(f"❌ AI returned no recommendations for {username}")
+            logger.error(f"❌ AI returned no recommendations across any libraries for {username}")
             return False
 
         logger.info("Step 3/3: Updating Plex thematic playlists...")
+        # Sync all generated playlists at once
         playlist_service.sync_thematic_playlists(admin_plex, token, combined_recs)
 
         logger.info(f"✅ Pipeline completed for {username}!")
@@ -80,7 +91,7 @@ async def run_recommendation_for_user(user_obj=None):
         return False
 
 async def run_recommendations_for_all():
-    logger.info("Running thematic recommendations...")
+    logger.info("Running isolated library recommendations...")
     
     active_users = []
     try:
