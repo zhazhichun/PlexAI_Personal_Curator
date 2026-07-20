@@ -10,12 +10,10 @@ settings = get_settings()
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-
 def _normalize_title(title: str) -> str:
     title = title.lower()
     title = re.sub(r"\s*\(\d{4}\)\s*$", "", title)
     return title.strip()
-
 
 class AIService:
     def __init__(self, api_key: str = None, model: str = None):
@@ -25,11 +23,12 @@ class AIService:
         deprecated_models = [
             "google/gemini-1.5-pro",
             "google/gemini-1.5-pro-latest",
-            "google/gemini-pro-1.5"
+            "google/gemini-pro-1.5",
+            "google/gemini-2.5-pro"
         ]
         
-        if raw_model in deprecated_models:
-            self.model = "google/gemini-2.5-pro"
+        if raw_model in deprecated_models or not raw_model:
+            self.model = "google/gemini-2.5-flash"
         else:
             self.model = raw_model
 
@@ -80,12 +79,10 @@ class AIService:
         if content is None:
             content = "{}"
 
-        # Parse and return directly without splitting
         result = self._parse_response(content, available_content, watch_history)
         return result
 
     def _build_system_prompt(self, media_type: str) -> str:
-        # Dynamic label based on what library we are looking at
         media_label = "Movies" if media_type == "movie" else "TV Shows"
         
         return f"""You are an expert Content Curator for a personal Plex media server.
@@ -123,7 +120,7 @@ EXPECTED JSON SCHEMA:
         return f"""
 TASK: Select items and organize them into dynamic themes.
 ============================================================
-SECTION 1 — USER WATCH HISTORY (Use these to build discovery themes, AND to populate your ONE "Rewatch: Old Favorites" theme!)
+SECTION 1 — USER WATCH HISTORY
 ============================================================
 {history_str}
 
@@ -136,7 +133,6 @@ SECTION 2 — AVAILABLE UNWATCHED POOL
     def _format_items_for_prompt(self, items: list[dict]) -> str:
         lines = []
         for item in items:
-            # Summaries remain stripped to keep network payloads lightning fast
             line = f"ID:{item.get('rating_key')} | Title: {item.get('title')} ({item.get('year')})"
             lines.append(line)
         return "\n".join(lines)
